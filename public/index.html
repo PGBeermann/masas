@@ -52,6 +52,13 @@
         <option value="CCC(C)O">2-Butanol</option>
         <option value="CCCCCCCC">n-Octano</option>
         <option value="CC(C)Cc1ccc(cc1)C(C)C(=O)O">Ibuprofeno</option>
+        <option value="O=C1CCCCC1">Ciclohexanona (anillo, ion distónico)</option>
+        <option value="C1CCNCC1">Piperidina (amina cíclica)</option>
+        <option value="CCOC(C)=O">Acetato de etilo (McLafferty + 1)</option>
+        <option value="COC(=O)c1ccccc1O">Salicilato de metilo (efecto orto)</option>
+        <option value="CC(=O)Oc1ccccc1C(=O)O">Aspirina (ceteno + efecto orto)</option>
+        <option value="Cc1ccccc1[N+](=O)[O-]">2-Nitrotolueno (efecto orto)</option>
+        <option value="CN1C=NC2=C1C(=O)N(C(=O)N2C)C">Cafeína (retro-reacción)</option>
       </select>
     </div>
     <div id="jsme" class="jsme"><div class="jsme-loading">Cargando editor JSME…</div></div>
@@ -118,7 +125,7 @@
 </main>
 
 <footer class="wrap foot">
-  <p>Motor químico: RDKit (MinimalLib/WASM) · Editor: JSME · Modelo de fragmentación basado en reglas (α-escisión, escisión inductiva, McLafferty, retro-Diels–Alder, tropilio, onio, pérdidas neutras).</p>
+  <p>Motor químico: RDKit (MinimalLib/WASM) · Editor: JSME · Modelo de fragmentación basado en reglas (α-escisión, escisión inductiva, McLafferty y McLafferty + 1, retro-Diels–Alder, tropilio, onio, ion distónico en anillos, efecto orto, pérdidas neutras).</p>
 </footer>
 <script src="app.js"></script>
 </body>
