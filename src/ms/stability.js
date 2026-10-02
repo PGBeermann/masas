@@ -83,7 +83,7 @@ function radicalClass(g, atoms, r) {
     case 'Br': s = 1.15; label = 'Br•'; break;
     case 'Cl': s = 0.6; label = 'Cl•'; break;
     case 'F': s = 0.04; label = 'F•'; break;
-    case 'O': s = heavy === 1 ? 0.18 : 0.8; label = heavy === 1 ? 'HO•' : 'radical alcoxilo/aciloxilo'; break;
+    case 'O': s = heavy === 1 ? 0.3 : a.nbrs.some(n => atoms.has(n.atom) && g.atoms[n.atom].aromatic) ? 0.45 : 0.8; label = heavy === 1 ? 'HO•' : 'radical alcoxilo/aciloxilo'; break;
     case 'N': {
       const nO = a.nbrs.filter(n => atoms.has(n.atom) && g.atoms[n.atom].el === 'O').length;
       if (nO >= 2) { s = 1.0; label = 'NO₂•'; } else { s = heavy === 1 ? 0.2 : 0.35; label = 'radical amino'; }

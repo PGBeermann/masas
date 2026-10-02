@@ -17,6 +17,7 @@ const { formulaToString, monoMass, nominalMass, ELECTRON_MASS, rdb } = require('
 const { isotopePattern } = require('../chem/isotopes');
 const { Species } = require('./species');
 const { PRIMARY_RULES, clean } = require('./rules');
+const { EXT_RULES } = require('./rules_ext');
 const { secondary } = require('./secondary');
 const REFS = require('./references');
 
@@ -96,7 +97,7 @@ function predict(RDKit, smilesIn, opts = {}) {
 
     // ---------- reglas primarias ----------
     let events = [];
-    for (const rule of PRIMARY_RULES) {
+    for (const rule of [...PRIMARY_RULES, ...EXT_RULES]) {
       try { events.push(...rule(g)); } catch (e) { /* regla no aplicable */ }
     }
     events.push(...aromaticCore(g));
@@ -105,11 +106,11 @@ function predict(RDKit, smilesIn, opts = {}) {
     // ---------- secundarias (2 generaciones) ----------
     const all = [];
     let frontier = events;
-    for (let gen = 1; gen <= 3 && frontier.length; gen++) {
+    for (let gen = 1; gen <= 4 && frontier.length; gen++) {
       const next = [];
       for (const e of frontier) {
         all.push(e);
-        if (gen >= 3) continue;
+        if (gen >= 4) continue;
         let kids = [];
         try { kids = secondary(e); } catch (_) { kids = []; }
         let kSum = 0;
@@ -222,7 +223,7 @@ function predict(RDKit, smilesIn, opts = {}) {
       spectrum, explanations,
       parentSvg: parentSvgFor([]),
       references: [...usedRefs].map(k => ({ key: k, text: REFS[k] })).filter(r => r.text),
-      meta: { engine: 'EI-MS rule-based predictor v1.0', rdkit: RDKit.version(), events: all.length, ms: Date.now() - t0,
+      meta: { engine: 'EI-MS rule-based predictor v1.1', rdkit: RDKit.version(), events: all.length, ms: Date.now() - t0,
         disclaimer: 'Intensidades semicuantitativas derivadas de reglas mecanísticas (EI 70 eV). Validar con espectros de referencia (NIST/Wiley).' }
     };
     return result;

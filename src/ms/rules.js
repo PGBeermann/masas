@@ -58,7 +58,9 @@ function alphaHetero(g) {
           tags: { onium: { het: xi, c: ca } } });
         const neu = new Species(g, neuAt, { rad: new Map([[nr.atom, 1]]) });
         const rc = radicalClass(g, neuAt, nr.atom);
-        const ionS = ONIUM[X.el] * fConj * fHal;
+        // Regla de Stevenson: si el radical saliente es bencílico/alílico (EI baja), la carga tiende a quedarse en él
+        const fStev = (X.el === 'O' || X.el === 'S') && /bencilo/.test(rc.label) ? 0.3 : 1;
+        const ionS = ONIUM[X.el] * fConj * fHal * fStev;
         out.push(ev({
           rule: 'alpha', ruleName: `α-Escisión (sitio radical en ${X.el}, ${kind})`, ion, neutral: neu,
           neutralLabel: rc.label, cleaved: [nr.bond], oe: false,
@@ -73,6 +75,7 @@ function alphaHetero(g) {
         }));
       }
       // (b) pérdida de H• desde Cα  (M − 1)
+      const ringX = g.bonds[na.bond].inRing;
       if (g.atoms[ca].h > 0 && !isHal) {
         const xc = g.bondBetween(xi, ca);
         const ion = new Species(g, allAtoms(g), { dH: new Map([[ca, -1]]), bo: new Map([[xc, 2]]), chg: new Map([[xi, 1]]),
@@ -80,9 +83,10 @@ function alphaHetero(g) {
         out.push(ev({
           rule: 'alphaH', ruleName: `α-Escisión con pérdida de H• (${X.el})`, ion,
           neutral: null, neutralFormula: { H: 1 }, neutralLabel: 'H•', cleaved: [], oe: false,
-          score: ONIUM[X.el] * fConj * 0.02,
+          score: ONIUM[X.el] * fConj * 0.02 * (ringX ? 8 : 1),
           steps: [
             `Ionización en el par libre de ${L(g, xi)} (M⁺•).`,
+            ...(ringX ? [`En heterociclos saturados la α-escisión de enlaces del anillo no cambia la masa (abre el anillo); por eso la pérdida de H• desde ${L(g, ca)} genera un ion iminio/oxonio cíclico [M−1]⁺ intenso (p. ej., piperidina m/z 84).`] : []),
             `Escisión homolítica (↷) del enlace C–H en ${L(g, ca)}: el radical forma el enlace π ${L(g, xi)}=${L(g, ca)} y se expulsa H•, generando [M−H]⁺.`,
             'La pérdida de H• es poco favorable frente a radicales alquilo (H• es el radical menos estable), por lo que [M−1]⁺ suele ser de baja intensidad salvo en aminas y aldehídos.'
           ],
@@ -307,7 +311,7 @@ function benzylicAllylic(g) {
       const ion = new Species(g, allAtoms(g), { dH: new Map([[cb.idx, -1]]), chg: new Map([[cb.idx, 1]]), tags: { benzyl: true } });
       out.push(ev({
         rule: 'benzylicH', ruleName: 'Pérdida de H• bencílico → ion tropilio', ion, neutral: null, neutralFormula: { H: 1 }, neutralLabel: 'H•',
-        cleaved: [], oe: false, score: cb.nbrs.length === 1 ? 2.2 : 0.1,
+        cleaved: [], oe: false, score: (cb.nbrs.length === 1 ? 2.2 : 0.1) * (ewgOnRing(g, arNb.atom) ? 0.12 : 1),
         steps: [
           'Ionización π del anillo aromático.',
           `Ruptura del enlace C–H bencílico en ${L(g, cb.idx)} con formación del catión bencilo que se reordena a tropilio (C₇H₆R⁺).`,
@@ -407,7 +411,9 @@ function mclafferty(g) {
         if (!g.isC(be) || !g.isSp3(be) || g.bonds[nb.bond].inRing) continue;
         for (const ng of g.atoms[be].nbrs) {
           const ga = ng.atom; if (ga === al) continue;
-          if (!g.isC(ga) || g.atoms[ga].h === 0 || g.atoms[ga].aromatic) continue;
+          const gaHet = ['N', 'O'].includes(g.atoms[ga].el) && g.atoms[ga].h > 0 && g.isSp3(ga);
+          if (gaHet && !(acc.aromatic || acc.kind === 'alqueno')) continue;
+          if (!gaHet && (!g.isC(ga) || g.atoms[ga].h === 0 || g.atoms[ga].aromatic)) continue;
           if (!g.isSp3(ga)) continue;
           const parts = split(g, nb.bond, al); if (!parts) continue;
           const [ionAt, neuAt] = parts;
@@ -424,10 +430,35 @@ function mclafferty(g) {
           const bg = g.bondBetween(be, ga);
           const neu = new Species(g, neuAt, { dH: new Map([[ga, -1]]), bo: new Map([[bg, 2]]) });
           const famTxt = acc.kind === 'carbonyl' ? classifyCarbonyl(g, y, x) : acc.kind;
-          const score = acc.base;
+          // Éster con el H γ en la cadena alcoxílica (α = O del éster)
+          const alkoxySide = acc.kind === 'carbonyl' && g.atoms[al].el === 'O';
+          const acylConj = alkoxySide && g.atoms[y].nbrs.some(n => n.atom !== al && n.atom !== x && (g.atoms[n.atom].aromatic || g.doubleBondPartner(n.atom) != null));
+          let score = acc.base;
+          if (alkoxySide) score = acylConj ? 1.0 : 0.15;
+          if (gaHet) score = 2.2;
+          if (alkoxySide && g.atoms[be].h > 0) {
+            // McLafferty + 1: doble transferencia de H → ácido protonado RC(OH)2⁺ (EE)
+            const ionP = new Species(g, ionAt, { dH: new Map([[x, 1], [al, 1]]), bo: new Map([[acc.bond, 1]]), chg: new Map([[y, 1]]), tags: { mclPlus1: true } });
+            const neuP = new Species(g, neuAt, { dH: new Map([[ga, -1], [be, -1]]), bo: new Map([[bg0(g, be, ga), 2]]), rad: new Map([[be, 1]]) });
+            out.push(ev({
+              rule: 'mclPlus1', ruleName: 'Reordenamiento de doble H («McLafferty + 1») en ésteres', ion: ionP, neutral: neuP,
+              neutralLabel: `radical alquenilo ${neuP.formulaString}•`, cleaved: [nb.bond], oe: false,
+              score: acylConj ? 0.45 : 0.4,
+              steps: [
+                `Ionización en el oxígeno carbonílico ${L(g, x)}.`,
+                `Primera transferencia: el H γ de ${L(g, ga)} pasa a ${L(g, x)} por un estado de transición de seis miembros (como en el McLafferty).`,
+                `Segunda transferencia: un H de ${L(g, be)} migra al oxígeno alcoxílico ${L(g, al)} (vía complejo ion–neutro) mientras se rompe ${B(g, al, be)}.`,
+                `Se expulsa el radical alquenilo ${neuP.formulaString}• y se forma el ácido protonado R–C(OH)₂⁺ (ion par-electrónico, masa impar: [RCOOH + H]⁺; m/z 61 en acetatos, 123 en benzoatos).`,
+                'Es característico de ésteres de alcoholes con ≥ 2 carbonos y suele superar al McLafferty simple en ésteres alifáticos.'
+              ],
+              refs: ['MT', 'GROSS', 'SILV']
+            }));
+          }
+          if (gaHet) ion.tags.benzylHtransfer = true;
           const ionTxt = acc.kind === 'carbonyl' ? 'radical-catión enólico' : acc.kind === 'aromático' ? 'radical-catión metilenciclohexadieno (isotolueno)' : 'radical-catión par-másico';
           out.push(ev({
-            rule: 'mclafferty', ruleName: `Reordenamiento de McLafferty (${famTxt})`, ion, neutral: neu, neutralLabel: `alqueno ${neu.formulaString}`,
+            rule: 'mclafferty', ruleName: gaHet ? `Escisión bencílica/alílica con transferencia de H desde ${g.atoms[ga].el} (McLafferty ${famTxt})` : `Reordenamiento de McLafferty (${famTxt}${alkoxySide ? ', lado alcoxilo' : ''})`,
+            ion, neutral: neu, neutralLabel: gaHet ? `${g.atoms[ga].el === 'O' ? 'aldehído/cetona' : 'imina'} ${neu.formulaString}` : `alqueno ${neu.formulaString}`,
             cleaved: [nb.bond], oe: true, score,
             steps: [
               `Ionización en ${acc.kind === 'carbonyl' ? `el par libre del oxígeno ${L(g, x)}` : acc.kind === 'aromático' ? 'el sistema π aromático' : `el sistema π ${L(g, x)}=${L(g, y)}`}.`,
@@ -444,7 +475,7 @@ function mclafferty(g) {
           out.push(ev({
             rule: 'mclaffertyAlk', ruleName: 'McLafferty con retención de carga en el alqueno', ion: ion2, neutral: neu2,
             neutralLabel: `${acc.kind === 'carbonyl' ? 'enol' : 'neutro'} ${neu2.formulaString}`, cleaved: [nb.bond], oe: true,
-            score: score * 0.08 * Math.min(neuAt.size, 6) / 2,
+            score: alkoxySide ? (neuAt.size >= 3 ? 0.45 * Math.min(neuAt.size, 6) / 2 : 0.01) : score * 0.08 * Math.min(neuAt.size, 6) / 2,
             steps: [
               'Mismo estado de transición de seis miembros que el reordenamiento de McLafferty.',
               `La carga queda en el fragmento alqueno ${ion2.formulaString}⁺• cuando su energía de ionización es comparable o menor que la del enol (regla de Stevenson).`
@@ -520,10 +551,10 @@ function neutralLosses(g) {
         const cb = g.atoms[ca].nbrs.find(n => n.atom !== X.idx && g.isC(n.atom) && g.atoms[n.atom].h > 0 && g.isSp3(n.atom));
         if (cb) {
           const nC = g.atoms.filter(a => a.el === 'C').length;
-          const ion = new Species(g, minus([X.idx]), { dH: new Map([[cb.atom, -1]]), bo: new Map([[g.bondBetween(ca, cb.atom), 2]]), oddElectron: true, depictAsNeutral: true });
+          const ion = new Species(g, minus([X.idx]), { dH: new Map([[cb.atom, -1]]), bo: new Map([[g.bondBetween(ca, cb.atom), 2]]), oddElectron: true, depictAsNeutral: true, tags: { cycloalkene: g.inRing(ca) } });
           mk({ rule: 'lossH2O', ruleName: X.el === 'O' ? 'Eliminación de H₂O (alcohol)' : 'Eliminación de H₂S (tiol)', ion, neutral: null,
             neutralFormula: X.el === 'O' ? { H: 2, O: 1 } : { H: 2, S: 1 }, neutralLabel: X.el === 'O' ? 'H₂O' : 'H₂S',
-            score: (X.el === 'O' ? 0.7 : 0.4) * (nC >= 4 ? 1.0 : 0.5) * [1, 1, 0.3, 0.12][Math.min(3, g.atoms[ca].nbrs.filter(n => g.isC(n.atom)).length)],
+            score: (X.el === 'O' ? 0.7 : 0.4) * (nC >= 4 ? 1.0 : 0.5) * (g.inRing(ca) ? 2.5 : [1, 1, 0.3, 0.12][Math.min(3, g.atoms[ca].nbrs.filter(n => g.isC(n.atom)).length)]),
             steps: [
               `Ionización en el par libre de ${L(g, X.idx)}.`,
               'Transferencia de H desde un carbono δ (1,4) o β (1,2) al heteroátomo a través de un estado de transición cíclico (preferentemente de 6 miembros).',
@@ -552,7 +583,7 @@ function neutralLosses(g) {
       const f = g.formula;
       const fCO = { ...f, C: f.C - 1, O: f.O - 1 };
       mk({ rule: 'phenolCO', ruleName: 'Pérdida de CO en fenoles', ion: new Species(g, M, { formula: clean(fCO), oddElectron: true }), neutral: null,
-        neutralFormula: { C: 1, O: 1 }, neutralLabel: 'CO', score: 0.55,
+        neutralFormula: { C: 1, O: 1 }, neutralLabel: 'CO', score: 0.55 * (g.atoms.filter(a => a.el !== 'C' && a.el !== 'H').length > 1 ? 0.3 : 1),
         steps: ['Ionización π del anillo fenólico.', 'Tautomerización del ion radical a la forma ciclohexadienona (ceto).', 'Contracción del anillo con expulsión de CO ([M−28]⁺•) → radical-catión ciclopentadieno (C₅H₆⁺• en fenol, m/z 66).'],
         refs: ['MT', 'SILV'] });
       const fHCO = { ...fCO, H: fCO.H - 1 };
@@ -613,6 +644,17 @@ function neutralLosses(g) {
   }
   return out;
 }
+function bg0(g, a, b) { return g.bondBetween(a, b); }
+/** ¿Hay un sustituyente atractor (NO₂, C=O, C≡N) en el anillo aromático que contiene `ar`? */
+function ewgOnRing(g, ar) {
+  const ring = g.rings.find(r => r.includes(ar)); if (!ring) return false;
+  return ring.some(i => g.atoms[i].nbrs.some(n => {
+    const a = g.atoms[n.atom]; if (a.aromatic) return false;
+    if (a.el === 'N' && a.nbrs.filter(m => g.atoms[m.atom].el === 'O').length >= 2) return true;
+    if (a.el === 'C' && (g.carbonylO(n.atom) != null || g.tripleBondPartner(n.atom, 'N') != null)) return true;
+    return false;
+  }));
+}
 function clean(f) { const o = {}; for (const [k, v] of Object.entries(f)) if (v > 0) o[k] = v; return o; }
 
 /* ------------------------------------------------------------------ */
@@ -626,6 +668,8 @@ function carbocycleOpening(g) {
     if (ring.some(i => g.atoms[i].aromatic || g.atoms[i].el !== 'C')) continue;
     const fused = ring.some(i => g.atoms[i].rings.length > 1);
     if (fused) continue;
+    // anillos con heteroátomo exocíclico (cetonas, alcoholes, aminas cíclicas) → regla ringAlpha
+    if (ring.some(i => g.atoms[i].nbrs.some(n => !g.isC(n.atom)))) continue;
     const hasDb = ring.some((i, k) => { const b = g.bond(i, ring[(k + 1) % ring.length]); return b && b.order === 2; });
     const f = g.formula; const key = hasDb ? 'ene' : 'ane'; if (done.has(key)) continue; done.add(key);
     const ringTxt = `${ring.length} miembros`;
@@ -645,4 +689,4 @@ function carbocycleOpening(g) {
 
 const PRIMARY_RULES = [carbocycleOpening, alphaHetero, carbonyl, inductive, haloniumCyclic, benzylicAllylic, sigmaCC, mclafferty, retroDielsAlder, neutralLosses];
 
-module.exports = { PRIMARY_RULES, isSaturatedAlkyl, clean, L, B };
+module.exports = { PRIMARY_RULES, isSaturatedAlkyl, clean, L, B, ev, split, allAtoms, classifyCarbonyl, ewgOnRing };

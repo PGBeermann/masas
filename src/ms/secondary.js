@@ -8,6 +8,7 @@ const { Species } = require('./species');
 const { cationClass } = require('./stability');
 const { clean, L, B } = require('./rules');
 const { formulaToString } = require('../chem/elements');
+const { orthoEffect } = require('./rules_ext');
 
 function child(parent, o) {
   return Object.assign({ steps: [], refs: [], children: [], generation: parent.generation + 1, parent, oe: false, cleaved: [] }, o);
@@ -33,9 +34,10 @@ function secondary(e) {
       const nf = g.formulaOf(atoms, dH);
       if (nf.C && nf.H === 2 * nf.C + 1 && Object.keys(nf).length === 2) tags.alkyl = nf.C;
       if (cc.cls === 'aryl') tags.aryl = true;
-      const ni = new Species(g, atoms, { dH, bo, chg, tags });
-      const k = cc.cls === 'aryl' ? 0.55 : Math.min(0.6, 0.6 * cc.score);
-      out.push(child(e, { rule: 'acyliumCO', ruleName: 'Descarbonilación del ion acilio (−CO)', ion: ni, neutral: null, neutralFormula: { C: 1, O: 1 }, neutralLabel: 'CO', k,
+      const dist = !!ion.tags.distonic;
+      const ni = new Species(g, atoms, { dH, bo, chg, rad: new Map(ion.rad), tags: dist ? { ...tags, noDepict: true, alkeneOE: true } : tags, oddElectron: dist });
+      const k = dist ? (atoms.size >= 3 ? 1.4 : 0.8) : cc.cls === 'aryl' ? 0.55 : Math.min(0.6, 0.6 * cc.score);
+      out.push(child(e, { rule: 'acyliumCO', ruleName: dist ? 'Descarbonilación del ion acilio distónico (−CO)' : 'Descarbonilación del ion acilio (−CO)', ion: ni, oe: dist, neutral: null, neutralFormula: { C: 1, O: 1 }, neutralLabel: 'CO', k,
         steps: [`El ion acilio ${fs}⁺ expulsa monóxido de carbono (molécula neutra estable, regla del electrón par) por ruptura heterolítica de ${B(g, c, r.atom)} (⇒).`,
           `Se forma ${cc.label} ${ni.formulaString}⁺ (Δm = 28). ${cc.cls === 'aryl' ? 'Ejemplo clásico: C₆H₅CO⁺ (m/z 105) → C₆H₅⁺ (m/z 77).' : ''}`],
         refs: ['MT', 'GROSS'] }));
@@ -63,6 +65,47 @@ function secondary(e) {
         refs: ['AMINES', 'MT'] }));
     }
   }
+
+  // (2b) Onio con alquilo sobre el carbono (alcoholes): R–CH=OH⁺ → CH₂=OH⁺ + alqueno
+  if (ion.tags.onium && !ion.formulaOverride && !ion.oddElectron) {
+    const { het, c } = ion.tags.onium;
+    const hetEl = g.atoms[het].el;
+    for (const n of g.atoms[c].nbrs) {
+      if (n.atom === het || !ion.atoms.has(n.atom) || !g.isC(n.atom) || !g.isSp3(n.atom) || g.bonds[n.bond].inRing) continue;
+      const side = g.sideOf(n.bond, n.atom, ion.atoms);
+      if (!side || side.has(c)) continue;
+      const beta = g.atoms[n.atom].nbrs.find(m => side.has(m.atom) && g.isC(m.atom) && g.isSp3(m.atom) && (g.atoms[m.atom].h + (ion.dH.get(m.atom) || 0)) > 0);
+      if (!beta) continue;
+      const atoms = new Set([...ion.atoms].filter(a => !side.has(a)));
+      const dH = new Map(ion.dH); dH.set(c, (dH.get(c) || 0) + 1);
+      const ni = new Species(g, atoms, { dH, bo: new Map(ion.bo), chg: new Map(ion.chg), tags: { onium: { het, c } } });
+      const neu = new Species(g, side, { dH: new Map([[beta.atom, -1]]), bo: new Map([[g.bondBetween(n.atom, beta.atom), 2]]) });
+      const k = { O: 1.0, N: 0.12, S: 0.2 }[hetEl] || 0.1;
+      out.push(child(e, { rule: 'oniumC', ruleName: 'Reacción del onio desde el carbono (pérdida de alqueno en R–CH=XH⁺)', ion: ni, neutral: neu, neutralLabel: `alqueno ${neu.formulaString}`, k,
+        steps: [`El ion ${fs}⁺ (EE, ${hetEl === 'O' ? 'oxonio' : hetEl === 'N' ? 'iminio' : 'tionio'}) transfiere un H β de la cadena (${L(g, beta.atom)}) al carbono cargado ${L(g, c)} vía un complejo ion–neutro [R⁺ / CH₂=XH].`,
+          `Se rompe ${B(g, c, n.atom)} y se elimina el alqueno ${neu.formulaString}; queda ${ni.formulaString}⁺ (p. ej., 2-butanol: m/z 59 → 31, CH₂=OH⁺).`],
+        refs: ['ALCOH', 'MT', 'EVEN'] }));
+    }
+  }
+
+  // (2c) Efecto orto en iones radicales secundarios (p. ej., aspirina 180 → 138 → 120)
+  if (ion.oddElectron && !ion.formulaOverride && ion.atoms.size && e.generation <= 2) {
+    for (const o of orthoEffect(g, ion.atoms, ion.dH)) {
+      out.push(child(e, { ...o, k: Math.min(1.3, 0.4 * o.base) }));
+    }
+  }
+
+  // (2d) Cadenas de pérdidas neutras tras reordenamientos
+  const fchain = (to, lossF, lossLabel, k, txt, tags = {}, oe = false) => out.push(child(e, { rule: 'chain', ruleName: `Pérdida de ${lossLabel} desde ${fs}${ion.oddElectron ? '⁺•' : '⁺'}`,
+    ion: fo(g, to, tags), neutral: null, neutralFormula: lossF, neutralLabel: lossLabel, k, oe, steps: [txt], refs: ['MT', 'EVEN'] }));
+  if (ion.tags.orthoKetene) fchain({ ...f, C: f.C - 1, O: f.O - 1 }, { C: 1, O: 1 }, 'CO', 0.6, `El ion ceteno ${fs}⁺• formado por efecto orto expulsa CO (contracción del anillo), p. ej., salicilatos m/z 120 → 92.`, { lossCO2: (f.O || 0) >= 2 }, true);
+  if (ion.tags.lossCO2 && f.O >= 1) fchain({ ...f, C: f.C - 1, O: f.O - 1 }, { C: 1, O: 1 }, 'CO', 0.3, `Segunda expulsión de CO desde ${fs}⁺• (m/z 92 → 64).`, {}, true);
+  if (ion.tags.orthoNitro) fchain({ ...f, C: f.C - 1, O: f.O - 1 }, { C: 1, O: 1 }, 'CO', 0.5, `El ion ${fs}⁺ (o-nitrotolueno −•OH) expulsa CO: m/z 120 → 92.`, { lossHCN: true });
+  if (ion.tags.lossHCN && f.N >= 1) fchain({ ...f, C: f.C - 1, N: f.N - 1, H: f.H - 1 }, { C: 1, H: 1, N: 1 }, 'HCN', 0.7, `${fs}⁺ elimina HCN dando el catión C₅H₅⁺ (m/z 65).`);
+  if (ion.tags.retroImide && f.O >= 1) fchain({ ...f, C: f.C - 1, O: f.O - 1 }, { C: 1, O: 1 }, 'CO', 1.3, `El ion ${fs}⁺• (tras la retro-reacción) expulsa CO del carbonilo remanente (cafeína 137 → 109).`, { imideHCN: 2 }, true);
+  if (ion.tags.imideHCN && f.N >= 1) fchain({ ...f, C: f.C - 1, N: f.N - 1, H: f.H - 1 }, { C: 1, H: 1, N: 1 }, 'HCN', 0.6, `Expulsión de HCN desde el anillo imidazólico de ${fs}⁺• (cafeína 109 → 82 → 55).`, ion.tags.imideHCN > 1 ? { imideHCN: ion.tags.imideHCN - 1 } : {}, true);
+  if (ion.tags.cycloalkene) fchain({ ...f, C: f.C - 1, H: f.H - 3 }, { C: 1, H: 3 }, '•CH₃', 0.5, `El radical-catión cicloalqueno ${fs}⁺• formado por deshidratación pierde •CH₃ (ciclohexanol 82 → 67), como el ciclohexeno.`);
+  if (ion.oddElectron && f.C >= 3 && f.C <= 5 && f.H === 2 * f.C && Object.keys(f).length === 2) fchain({ C: f.C, H: f.H - 1 }, { H: 1 }, 'H•', 0.4, `El radical-catión ${fs}⁺• pierde H• alílico dando el catión alilo ${f.C === 3 ? 'C₃H₅⁺ (m/z 41)' : ''}.`, { allylic: true });
 
   // (3) Cationes alquilo
   if (ion.tags.alkyl) {
