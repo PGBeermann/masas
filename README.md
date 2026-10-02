@@ -108,7 +108,8 @@ SMILES ─► RDKit (validación, sanitización, aromaticidad, SSSR) ─► MolG
 | `src/chem/molgraph.js` | Grafo molecular desde el JSON de RDKit |
 | `src/ms/species.js` | Ion/neutro como subgrafo + transferencias de H, órdenes de enlace, cargas y radicales → SMILES/SVG |
 | `src/ms/stability.js` | Escalas de estabilidad de cationes y radicales (regla de Stevenson, pérdida del radical mayor) |
-| `src/ms/rules.js` | Reglas primarias |
+| `src/ms/rules.js` | Reglas primarias (1–11) |
+| `src/ms/rules_ext.js` | Reglas ampliadas v1.1 (12–15): anillos/ion distónico, retro-reacción de imidas, efecto orto, pérdida de ROH |
 | `src/ms/secondary.js` | Fragmentaciones consecutivas |
 | `src/ms/engine.js` | Orquestación, estabilidad de M⁺•, espectro y explicaciones |
 
@@ -122,7 +123,9 @@ SMILES ─► RDKit (validación, sanitización, aromaticidad, SSSR) ─► MolG
 | 4 | Ion halonio cíclico de 5 miembros | 1-bromohexano m/z 135/137 |
 | 5 | Escisión bencílica → tropilio; escisión alílica | Tolueno/etilbenceno m/z 91 |
 | 6 | Escisión σ C–C con preferencia por ramificación | n-Alcanos m/z 43, 57, 71, 85 |
-| 7 | Reordenamiento de McLafferty (C=O, C=N, C≡N, C=C, aromático) con ambas retenciones de carga | 2-hexanona m/z 58; ácido butanoico m/z 60 |
+| 7 | Reordenamiento de McLafferty (C=O, C=N, C≡N, C=C, aromático) con ambas retenciones de carga; en ésteres, también desde la cadena alcoxílica | 2-hexanona m/z 58; ácido butanoico m/z 60 |
+| 7b | **McLafferty + 1** (doble transferencia de H en ésteres → RC(OH)₂⁺) *(v1.1)* | Acetato de etilo m/z 61; benzoato de etilo m/z 123 |
+| 7c | **Escisión bencílica/alílica con transferencia de H desde N–H u O–H** (McLafferty aromático con γ-heteroátomo) *(v1.1)* | 2-Feniletanol m/z 92; dopamina m/z 124 |
 | 8 | Retro-Diels–Alder (ciclohexenos, incl. fusionados a arenos) | Ciclohexeno m/z 54 |
 | 9 | Apertura de carbociclos (−•CH₃, −C₂H₄) | Ciclohexeno m/z 67; ciclohexano m/z 56 |
 | 10 | Pérdidas neutras: H₂O, H₂S, HX, CO y HCO• (fenoles), HCN (anilinas/azinas), NO• (nitroarenos), ceteno (acetanilidas/acetatos de arilo), CH₂O y •CH₃ (anisoles) | Acetanilida m/z 93; fenol m/z 66 |
@@ -130,15 +133,50 @@ SMILES ─► RDKit (validación, sanitización, aromaticidad, SSSR) ─► MolG
 | S2 | Reacción del onio (pérdida de alqueno desde iminio/oxonio) | 86 → 58; 59 → 31 |
 | S3 | Carbocationes alquilo: −H₂, −CH₄, −alqueno | 43 → 41; 57 → 41 |
 | S4 | Degradación de iones aromáticos (−C₂H₂, −CO) | 91 → 65 → 39; 77 → 51; 93 → 65 |
+| 12 | **α-Escisión en anillos con ion distónico** *(v1.1)*: (A) β-escisión con pérdida de alqueno; (B) transferencia 1,4/1,5-H + β-escisión con pérdida de radical; (C) en éteres cíclicos, expulsión de R₂C=O con carga en el hidrocarburo | Ciclohexanona 55 y 70 → 42; ciclohexanol 57; piperidina 56/57; pirrolidina 43; THF 42 |
+| 13 | **Retro-reacción de imidas/ureas cíclicas** (pérdida de R–N=C=O) + −CO y −HCN consecutivos *(v1.1)* | Cafeína 194 → 137 → 109 → 82 → 55 |
+| 14 | **Efecto orto** *(v1.1)*: eliminación de ROH/H₂O (donador OH, NH, SH o CH orto a COOR/COOH) y de •OH en o-nitroarenos; se aplica también a iones secundarios | Salicilato de metilo 152 → 120 → 92; aspirina 180 → 138 → 120; o-nitrotolueno 137 → 120 |
+| 15 | Pérdida de ROH en ésteres (ion ceteno) *(v1.1)* | [M−ROH]⁺• débil |
+| S5 | **Reacción del onio desde el carbono** (R–CH=OH⁺ → CH₂=OH⁺ + alqueno) *(v1.1)* | 2-Butanol 59 → 31 |
+| S6 | Cadenas de pérdidas tras reordenamientos: −CO del acilio distónico, −CO tras efecto orto, −•CH₃ del cicloalqueno de deshidratación, −H• de iones CₙH₂ₙ⁺• | Ciclohexanona 70 → 42; ciclohexanol 82 → 67 |
 
 Cada ion se clasifica como **OE⁺•** o **EE⁺** (RDB entero/semientero), se verifica la **regla del nitrógeno** y se informan m/z nominal y exacto (restando la masa del electrón).
 
 ## 5. Validación
 
-`npm test` compara la predicción con los picos principales de 20 espectros EI de referencia (NIST WebBook, SRD 69):
+`npm test` compara la predicción con los picos principales de **41 espectros EI de referencia** (valores aproximados, NIST WebBook SRD 69). Además del conjunto original, la v1.1 incorpora ácidos, ésteres, cetonas y aminas cíclicas, un alcohol y un éter cíclicos, pares de isómeros orto/para y cafeína. Se informan tres métricas: picos de referencia predichos (≥ 2 %), acierto del pico base y similitud coseno calculada sobre los m/z de referencia.
 
-* **Pico base correcto: 20/20.**
-* **Picos de referencia predichos (≥ 2 %): 80/91 (88 %).**
+| Versión | Conjunto | Picos predichos | Pico base | Coseno medio |
+|---|---|---|---|---|
+| v1.0 | 41 compuestos | 146/194 (75 %) | 29/41 | — |
+| **v1.1** | 41 compuestos | **173/194 (89 %)** | **40/41** | **0,953** |
+| v1.1 | 20 originales | 81/91 | 20/20 | 0,960 |
+| v1.1 | 21 nuevos | 92/103 | 20/21 | 0,945 |
+
+El único pico base no acertado corresponde al ácido benzoico (predicho 122 > 105; en la referencia 105 > 122, con ambos picos intensos).
+
+**Compuestos incorporados en la v1.1**
+
+| Compuesto | Predicho v1.1 (m/z:%) | Referencia (aprox.) |
+|---|---|---|
+| Acetato de etilo | 43:100 61:19 88:19 73:9 | 43:100 45:15 61:14 70:12 88:8 |
+| Benzoato de etilo | 105:100 77:64 122:44 150:36 123:23 | 105:100 77:40 122:30 150:25 123:10 |
+| Ciclohexanona | 55:100 42:61 41:30 98:22 70:19 | 55:100 42:85 98:35 41:30 69:25 70:15 |
+| Ciclopentanona | 55:100 28:58 56:46 84:30 | 55:100 84:50 28:40 56:35 41:30 |
+| Ciclohexanol | 57:100 82:30 67:20 100:2 | 57:100 82:45 67:30 44:25 100:3 |
+| Piperidina | 84:100 56:69 85:66 57:46 | 84:100 85:60 56:50 57:45 44:35 30:30 |
+| Pirrolidina | 43:100 70:78 71:51 42:15 | 43:100 71:45 70:40 42:35 28:30 |
+| Tetrahidrofurano | 42:100 41:49 71:26 72:19 | 42:100 41:50 71:45 72:30 27:25 |
+| Salicilato de metilo (orto) | **120**:100 121:76 92:73 152:26 | **120**:100 92:60 152:45 121:40 |
+| 4-Hidroxibenzoato de metilo (para) | **121**:100 93:54 152:38 | **121**:100 152:50 93:20 |
+| 2-Nitrotolueno (orto) | **120**:100 91:71 137:58 92:49 65:44 | **120**:100 65:70 92:55 91:40 137:10 |
+| 4-Nitrotolueno (para) | **91**:100 137:83 107:41 | **91**:100 137:70 65:60 107:20 |
+| Aspirina | 120:100 92:73 138:66 43:63 180:19 | 120:100 43:45 138:45 92:30 180:10 |
+| Cafeína | 194:100 109:86 82:51 55:44 137:33 | 194:100 109:60 55:35 67:35 82:25 |
+
+Los pares orto/para muestran que el motor distingue isómeros de posición mediante el efecto orto.
+
+**Conjunto original (v1.0, sin regresión)**
 
 | Compuesto | Predicho (m/z:%) | Referencia NIST (aprox.) |
 |---|---|---|
@@ -156,13 +194,14 @@ Cada ion se clasifica como **OE⁺•** o **EE⁺** (RDB entero/semientero), se 
 ### Alcance y limitaciones (declaración metodológica)
 
 1. Las intensidades son **semicuantitativas**: factores heurísticos calibrados contra espectros de referencia, no cálculos cinéticos RRKM/QET. Sirven para docencia, hipótesis de asignación y cribado; **no sustituyen** la comparación con bibliotecas NIST/Wiley ni la medición experimental.
-2. No se modelan aún: efecto *orto*, reordenamientos de esqueleto profundos (esteroides, terpenos policíclicos), fragmentación de policiclos fusionados saturados (p. ej., decalina), retro-reacciones de heterociclos (p. ej., pérdida de CH₃NCO en cafeína), derivados TMS específicos, ni iones de carga doble.
-3. Las estructuras de iones de reordenamiento se dibujan con su esqueleto neutro y se rotulan ⁺•; los iones descritos sólo por fórmula (p. ej., C₅H₅⁺) no se dibujan.
-4. Los átomos se citan con el índice del dibujo RDKit (base 0).
+2. No se modelan aún: reordenamientos de esqueleto en policiclos fusionados (la α-escisión en anillos de la v1.1 sólo actúa cuando la doble ruptura separa la molécula, por lo que esteroides, terpenos y decalina siguen sin tratarse bien); retro-Diels–Alder en flavonoides y tetrahidroisoquinolinas; efecto orto en cetonas, amidas y éteres; derivados TMS (m/z 73, 75, 147); pérdidas de CO₂/SO₂/N₂; pérdidas sucesivas de halógenos; iones de carga doble y metaestables.
+3. Algunos picos menores siguen ausentes o subestimados: m/z 31 del terc-butanol, 73 de ácidos alifáticos (escisión γ), 44 y 30 de la piperidina y 67 de la cafeína.
+4. Las estructuras de iones de reordenamiento se dibujan con su esqueleto neutro y se rotulan ⁺•; los iones descritos sólo por fórmula (p. ej., C₅H₅⁺) no se dibujan.
+5. Los átomos se citan con el índice del dibujo RDKit (base 0).
 
 ### Cómo añadir una regla
 
-Cree en `src/ms/rules.js` una función `(g) => eventos[]` que devuelva objetos `{ rule, ruleName, ion: Species, neutral, score, steps, refs, oe }` y agréguela a `PRIMARY_RULES`. Las fragmentaciones consecutivas se añaden en `src/ms/secondary.js`. Ejecute `npm test` para verificar que la calibración no se degrada.
+Cree en `src/ms/rules_ext.js` (o `rules.js`) una función `(g) => eventos[]` que devuelva objetos `{ rule, ruleName, ion: Species, neutral, score, steps, refs, oe }` y agréguela a `EXT_RULES` (o `PRIMARY_RULES`). Las fragmentaciones consecutivas se añaden en `src/ms/secondary.js`. Ejecute `npm test` para verificar que la calibración no se degrada.
 
 ## 6. Referencias
 
@@ -183,5 +222,12 @@ Cree en `src/ms/rules.js` una función `(g) => eventos[]` que devuelva objetos `
 15. Bienfait, B.; Ertl, P. JSME: a free molecule editor in JavaScript. *J. Cheminform.* 2013, 5, 24.
 16. McDonald, R. S.; Wilks, P. A. JCAMP-DX: A standard form for exchange of infrared spectra in computer readable form. *Appl. Spectrosc.* 1988, 42, 151–162; Lampen, P. et al. JCAMP-DX for mass spectrometry. *Appl. Spectrosc.* 1994, 48, 1545–1552.
 17. NIST Chemistry WebBook, NIST Standard Reference Database Number 69. https://webbook.nist.gov
+18. Yates, B. F.; Bouma, W. J.; Radom, L. Distonic radical cations: guidelines for the assessment of their stability. *Tetrahedron* 1986, 42, 6225–6234.
+19. Schwarz, H. Some newer aspects of mass spectrometric ortho effects. *Top. Curr. Chem.* 1978, 73, 231–263.
 
 Licencias de terceros: RDKit (BSD-3), JSME (BSD-3), Express (MIT), Helmet (MIT).
+
+## 7. Historial de versiones
+
+- **v1.1.0** — α-Escisión en anillos con ion distónico (cetonas, alcoholes, aminas, éteres y sulfuros cíclicos); McLafferty + 1 y pérdida de ROH en ésteres; McLafferty desde la cadena alcoxílica con retención de carga en el alqueno; efecto orto (−ROH/−H₂O, −•OH) también en iones secundarios; reacción del onio desde el carbono en oxonios de alcoholes; escisión bencílica con transferencia de H desde N–H/O–H; regla de Stevenson en α-escisiones que expulsan radicales bencílicos; retro-reacción de imidas/ureas cíclicas (cafeína); validación ampliada a 41 compuestos con similitud coseno.
+- **v1.0.0** — Versión inicial: 11 reglas primarias, 4 secundarias, 20 compuestos de validación; despliegue PM2/Nginx y Dokploy.
