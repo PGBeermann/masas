@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predictor EI-MS</title>
+<meta name="description" content="Predicción mecanística de espectros de masas por impacto electrónico (70 eV) a partir de estructuras SMILES.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script>
+  // JSME (Bienfait & Ertl, J. Cheminform. 2013, 5, 24) — servido localmente desde /jsme
+  window.jsmeApplet = null;
+  function jsmeOnLoad() {
+    var ph = document.querySelector('.jsme-loading'); if (ph) ph.remove();
+    window.jsmeApplet = new JSApplet.JSME('jsme', '100%', '360px', { options: 'oldlook,star,nocanonize,marker' });
+    window.jsmeApplet.setCallBack('AfterStructureModified', function () { window.dispatchEvent(new CustomEvent('jsme-change')); });
+    window.dispatchEvent(new CustomEvent('jsme-ready'));
+  }
+</script>
+<script src="jsme/jsme.nocache.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><path d="M3 28h26M7 28V18M11 28V8M15 28V22M19 28V4M23 28V15M27 28V24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      <div>
+        <h1>Predictor EI-MS</h1>
+        <p>Espectro de masas por impacto electrónico (70 eV) y mecanismos de fragmentación</p>
+      </div>
+    </div>
+    <button id="themeBtn" class="ghost" type="button" aria-label="Cambiar tema">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card editor">
+    <div class="card-head">
+      <h2>1. Estructura</h2>
+      <select id="examples" aria-label="Ejemplos">
+        <option value="">Ejemplos…</option>
+        <option value="CCCCC(C)=O">2-Hexanona (McLafferty)</option>
+        <option value="CCCC(=O)c1ccccc1">Butirofenona</option>
+        <option value="CCc1ccccc1">Etilbenceno (tropilio)</option>
+        <option value="CCN(CC)CC">Trietilamina (α-escisión)</option>
+        <option value="CCCCCCBr">1-Bromohexano (bromonio)</option>
+        <option value="C1CC=CCC1">Ciclohexeno (retro-Diels–Alder)</option>
+        <option value="COC(=O)c1ccccc1">Benzoato de metilo</option>
+        <option value="CC(=O)Nc1ccccc1">Acetanilida (ceteno)</option>
+        <option value="CCC(C)O">2-Butanol</option>
+        <option value="CCCCCCCC">n-Octano</option>
+        <option value="CC(C)Cc1ccc(cc1)C(C)C(=O)O">Ibuprofeno</option>
+      </select>
+    </div>
+    <div id="jsme" class="jsme"><div class="jsme-loading">Cargando editor JSME…</div></div>
+    <form id="form" class="row">
+      <label class="grow">SMILES
+        <input id="smiles" name="smiles" autocomplete="off" spellcheck="false" placeholder="p. ej. CCCCC(C)=O" required>
+      </label>
+      <label class="narrow">Umbral (%)
+        <input id="threshold" type="number" min="0" max="10" step="0.5" value="0.5">
+      </label>
+      <button id="go" type="submit" class="primary">Predecir espectro</button>
+    </form>
+    <p class="hint">Dibuje la molécula en JSME o escriba el SMILES. Se analiza la molécula neutra (si hay sales, se toma el componente mayor).</p>
+  </section>
+
+  <div id="status" class="status" role="status" aria-live="polite"></div>
+
+  <section id="results" class="hidden">
+    <section class="card">
+      <div class="card-head">
+        <h2>2. Resumen</h2>
+        <div class="actions">
+          <button type="button" class="ghost" data-export="csv">CSV</button>
+          <button type="button" class="ghost" data-export="jdx">JCAMP-DX</button>
+          <button type="button" class="ghost" data-export="json">JSON</button>
+          <button type="button" class="ghost" data-export="print">Imprimir / PDF</button>
+        </div>
+      </div>
+      <div class="summary">
+        <div id="parentSvg" class="mol"></div>
+        <dl id="summary" class="kv"></dl>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>3. Espectro de masas predicho <span class="muted">(EI, 70 eV)</span></h2>
+        <div class="seg" role="tablist">
+          <button type="button" class="on" data-view="chart" role="tab">Gráfico</button>
+          <button type="button" data-view="table" role="tab">Tabla</button>
+        </div>
+      </div>
+      <div id="chartView">
+        <div id="chart" class="chart"></div>
+        <div id="tip" class="tip" hidden></div>
+      </div>
+      <div id="tableView" hidden>
+        <div class="table-wrap"><table id="peakTable"><thead><tr><th>m/z</th><th>Int. rel. (%)</th><th>Composición</th><th>Tipo</th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <p class="muted small" id="disclaimer"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>4. Mecanismos de formación de los iones principales</h2></div>
+      <p class="muted small">Convención de flechas: <b>↷</b> desplazamiento de un electrón (escisión homolítica, iniciada por el sitio radical); <b>⇒</b> desplazamiento de un par electrónico (escisión heterolítica / inductiva). Los átomos se identifican con el índice mostrado en la estructura (numeración RDKit, base 0); en azul se resaltan los átomos que retiene el ion y en naranja los enlaces que se rompen.</p>
+      <div id="explanations" class="expl"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>5. Referencias</h2></div>
+      <ol id="refs" class="refs"></ol>
+    </section>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  <p>Motor químico: RDKit (MinimalLib/WASM) · Editor: JSME · Modelo de fragmentación basado en reglas (α-escisión, escisión inductiva, McLafferty, retro-Diels–Alder, tropilio, onio, pérdidas neutras).</p>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>
