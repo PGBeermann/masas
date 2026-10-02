@@ -1,0 +1,22 @@
+{
+  "name": "eims-predictor",
+  "version": "1.0.0",
+  "description": "Predicción mecanística de espectros EI-MS (70 eV) a partir de SMILES (Node.js + RDKit.js + JSME)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/run.js && node test/robustness.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@rdkit/rdkit": "^2026.3.6",
+    "compression": "^1.8.2",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "jsme-editor": "^2024.4.29"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}
