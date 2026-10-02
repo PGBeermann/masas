@@ -46,6 +46,34 @@ sudo certbot --nginx -d espectros.su-dominio.edu.pa
 
 Variables de entorno (`ecosystem.config.js`): `PORT` (3100), `HOST` (127.0.0.1, sólo accesible vía Nginx), `BASE_PATH` (para publicar en un subdirectorio, p. ej. `/espectros`), `RATE_LIMIT` (solicitudes/min por IP y por instancia).
 
+## 2-bis. Despliegue con Dokploy (recomendado si el VPS ya usa Dokploy)
+
+Dokploy construye la imagen desde el `Dockerfile` incluido y publica el servicio a través de su Traefik (TLS automático con Let's Encrypt). **No se usan** `ecosystem.config.js` (PM2) ni `deploy/nginx-eims.conf`.
+
+1. Suba el proyecto a un repositorio Git (GitHub/GitLab/Gitea) **sin** `node_modules` (ya está en `.gitignore`).
+2. En Dokploy: *Project → Create Service → Application*.
+3. *General → Provider*: el repositorio y la rama. *Build Type*: **Dockerfile** (ruta `Dockerfile`, contexto `.`).
+4. *Environment* (opcional; el Dockerfile ya trae estos valores por defecto):
+   ```
+   PORT=3100
+   HOST=0.0.0.0
+   TRUST_PROXY=1
+   RATE_LIMIT=60
+   BASE_PATH=
+   ```
+5. *Domains → Add Domain*: host `espectros.su-dominio.edu.pa`, path `/`, **Container Port 3100**, HTTPS activado, certificado *Let's Encrypt*. El registro DNS A del subdominio debe apuntar a la IP del VPS.
+6. *Deploy*. El contenedor queda sano cuando `GET /api/health` responde `{"ok":true}` (HEALTHCHECK del Dockerfile).
+7. Escalado: *Advanced → Replicas* (cada réplica es independiente; el límite de tasa se aplica por réplica).
+
+Diferencias respecto de la instalación con PM2/Nginx:
+
+| Aspecto | PM2 + Nginx | Dokploy |
+|---|---|---|
+| Interfaz de escucha | `HOST=127.0.0.1` | `HOST=0.0.0.0` (obligatorio dentro del contenedor) |
+| Proxy de confianza | `TRUST_PROXY=loopback` | `TRUST_PROXY=1` (Traefik es un salto; necesario para que el límite de tasa vea la IP real del cliente) |
+| TLS / dominio | Certbot + Nginx | Traefik de Dokploy |
+| Reinicio y apagado | PM2 | Docker (`SIGTERM` → cierre ordenado del servidor) |
+
 ## 3. API
 
 `POST /api/predict` — cuerpo `{"smiles": "CCCCC(C)=O", "threshold": 0.5}`

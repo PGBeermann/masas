@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+*.log
+.git
+.gitignore
+.env
+deploy
+ecosystem.config.js
+*.png
+*.zip

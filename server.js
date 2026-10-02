@@ -17,7 +17,9 @@ const HOST = process.env.HOST || '127.0.0.1';
 const BASE = (process.env.BASE_PATH || '').replace(/\/$/, ''); // p. ej. "/espectros" si se publica en un subdirectorio
 
 const app = express();
-app.set('trust proxy', 'loopback');
+// Detrás de Nginx local: 'loopback'. Detrás de Traefik (Dokploy/Docker): 1 salto → TRUST_PROXY=1
+const TP = process.env.TRUST_PROXY || 'loopback';
+app.set('trust proxy', /^\d+$/.test(TP) ? Number(TP) : TP === 'true' ? true : TP);
 app.disable('x-powered-by');
 app.use(helmet({
   contentSecurityPolicy: {
@@ -88,5 +90,7 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
 
 initRDKit().then(R => {
   RDKit = R;
-  app.listen(PORT, HOST, () => console.log(`EI-MS Predictor en http://${HOST}:${PORT}${BASE || '/'}  (RDKit ${R.version()})`));
+  const server = app.listen(PORT, HOST, () => console.log(`EI-MS Predictor en http://${HOST}:${PORT}${BASE || '/'}  (RDKit ${R.version()})`));
+  // Apagado ordenado (docker stop / redeploy de Dokploy envía SIGTERM)
+  for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); });
 }).catch(e => { console.error('No se pudo inicializar RDKit:', e); process.exit(1); });
