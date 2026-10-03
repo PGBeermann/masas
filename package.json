@@ -1,6 +1,6 @@
 {
   "name": "eims-predictor",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Predicción mecanística de espectros EI-MS (70 eV) a partir de SMILES (Node.js + RDKit.js + JSME)",
   "main": "server.js",
   "scripts": {
