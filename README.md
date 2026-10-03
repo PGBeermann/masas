@@ -157,6 +157,7 @@ Se revisaron todos los patrones del capítulo frente a la v1.1; sólo se añadie
 | B8 | Iones onio cíclicos de 5 miembros ampliados a I y S, e iones de 3 miembros (halogenonio/tiiranio) | Halógenos §5; tioles §4 | 1-yodohexano m/z 183; 1-hexanotiol m/z 89, 61 |
 | B9 | Doble McLafferty en cetonas con H γ en ambas cadenas | Carbonilos (4-octanona) | 4-octanona m/z 58 |
 | B10 | Cationes alilo CₙH₂ₙ₋₁⁺ → −H₂ (41 → 39, 55 → 53, 69 → 67) | Alcanos §7; alquinos §3 | m/z 39 |
+| B12 | McLafferty de alquenos con reparto de carga por la regla de Stevenson entre los dos alquenos (EI estimada por tamaño y grado de sustitución del C=C); antes la carga en el alqueno expulsado se trataba como minoritaria | Alquenos §4 (hept-1-eno) | 1-Hepteno m/z 56 > 42 (≈ 100:55) |
 | B11 | Haluros de ácido: ion halocarbonilo X–C≡O⁺ menos estable que R–C≡O⁺ | Carbonilos §2 | Cloruro de butanoilo m/z 71 > 63 |
 
 En las reglas B1 y B6 las etiquetas de átomo (C3, O5…) siempre remiten a los índices del dibujo de la molécula original, aunque el mecanismo ocurra sobre un isómero o un ion intermedio.
@@ -176,22 +177,23 @@ Cada ion se clasifica como **OE⁺•** o **EE⁺** (RDB entero/semientero), se 
 
 El único pico base no acertado corresponde al ácido benzoico (predicho 122 > 105; en la referencia 105 > 122, con ambos picos intensos).
 
-**Validación v1.2.** El archivo `test/reference.js` publicado en el repositorio contenía sólo los 20 compuestos originales (los 21 de la v1.1 citados arriba no están en el repositorio). A esos 20 se añadieron 9 compuestos ilustrativos del capítulo de Beauchamp (con datos del propio capítulo y de NIST):
+**Validación v1.2.** El archivo `test/reference.js` publicado en el repositorio contenía sólo los 20 compuestos originales (los 21 de la v1.1 citados arriba no están en el repositorio). A esos 20 se añadieron 10 compuestos ilustrativos del capítulo de Beauchamp (con datos del propio capítulo y de NIST):
 
 | Conjunto | v1.1 | v1.2 |
 |---|---|---|
 | 20 originales | 81/91 · base 20/20 | 81/91 · base 20/20 (sin cambios) |
-| 9 Beauchamp | 56/73 · base 4/9 | **66/73** · base 4/9 |
-| Total 29 | 137/164 | **147/164 (90 %)** · base 24/29 |
+| 10 Beauchamp | 66/85 · base 4/10 | **78/85** · base 4/10 |
+| Total 30 | 147/176 | **159/176 (90 %)** · base 24/30 |
 
 | Compuesto | Predicho v1.2 (m/z:%) | Referencia (aprox.) |
 |---|---|---|
-| (E)-2-Hepteno | 55:100 69:51 41:45 56:42 98:26 42:25 70:19 | 55:100 56:90 41:75 69:48 98:44 70:17 |
-| 3,4-Dimetilhexano | 57:100 55:60 56:58 41:34 85:34 | 56:100 57:81 43:58 41:43 85:41 |
+| 1-Hepteno | 41:100 56:65 55:58 42:43 39:26 69:26 98:20 | 56:100 41:97 55:68 29:56 42:55 70:44 69:31 |
+| (E)-2-Hepteno | 55:100 56:70 41:58 69:55 42:54 70:33 98:21 | 55:100 56:90 41:75 69:48 98:44 70:17 |
+| 3,4-Dimetilhexano | 57:100 56:60 55:60 41:34 85:34 | 56:100 57:81 43:58 41:43 85:41 |
 | 1-Hexanotiol | 47:100 89:31 61:22 118:16 56:15 | 56:100 43:48 41:35 55:35 118:30 |
-| 1-Heptino | 39:100 40:70 53:38 67:29 95:23 | 81:100 41:71 55:51 29:46 67:44 |
+| 1-Heptino | 39:100 53:40 56:32 43:32 67:29 | 81:100 41:71 55:51 29:46 67:44 |
 
-Picos base aún no acertados: 3,4-dimetilhexano (57 vs 56, ambos intensos), 1-butanol (31 vs 56), 1-hexanotiol (47 vs 56), 4-octanona (71 vs 57) y 1-heptino (39 vs 81).
+Picos base aún no acertados: 1-hepteno (41 vs 56, ambos ≈ 100 % en la referencia), 3,4-dimetilhexano (57 vs 56, ambos intensos), 1-butanol (31 vs 56), 1-hexanotiol (47 vs 56), 4-octanona (71 vs 57) y 1-heptino (39 vs 81).
 
 **Compuestos incorporados en la v1.1**
 
@@ -269,6 +271,6 @@ Licencias de terceros: RDKit (BSD-3), JSME (BSD-3), Express (MIT), Helmet (MIT).
 
 ## 7. Historial de versiones
 
-- **v1.2.0** — Patrones de Beauchamp (MS_chapter.pdf) ausentes en v1.1: migración del doble/triple enlace antes de fragmentarse; escisión propargílica, [M−1]⁺ y McLafferty en alquinos; eliminación de R–H en alcanos ramificados; eliminación de ROH, RSH, NH₃/RNH₂; fragmentación alquénica consecutiva de iones de eliminación; −(H₂O + C₂H₄) en 1-alcanoles; onio cíclicos de 5 y 3 miembros con Cl, Br, I y S; doble McLafferty en cetonas; −H₂ en cationes alilo; ion halocarbonilo. Conjunto de validación ampliado con 9 compuestos del capítulo.
+- **v1.2.0** — Patrones de Beauchamp (MS_chapter.pdf) ausentes en v1.1: migración del doble/triple enlace antes de fragmentarse; escisión propargílica, [M−1]⁺ y McLafferty en alquinos; eliminación de R–H en alcanos ramificados; eliminación de ROH, RSH, NH₃/RNH₂; fragmentación alquénica consecutiva de iones de eliminación; −(H₂O + C₂H₄) en 1-alcanoles; onio cíclicos de 5 y 3 miembros con Cl, Br, I y S; doble McLafferty en cetonas; −H₂ en cationes alilo; ion halocarbonilo. reparto de carga por la regla de Stevenson en el McLafferty de alquenos (1-hepteno 56 > 42). Conjunto de validación ampliado con 10 compuestos del capítulo.
 - **v1.1.0** — α-Escisión en anillos con ion distónico (cetonas, alcoholes, aminas, éteres y sulfuros cíclicos); McLafferty + 1 y pérdida de ROH en ésteres; McLafferty desde la cadena alcoxílica con retención de carga en el alqueno; efecto orto (−ROH/−H₂O, −•OH) también en iones secundarios; reacción del onio desde el carbono en oxonios de alcoholes; escisión bencílica con transferencia de H desde N–H/O–H; regla de Stevenson en α-escisiones que expulsan radicales bencílicos; retro-reacción de imidas/ureas cíclicas (cafeína); validación ampliada a 41 compuestos con similitud coseno.
 - **v1.0.0** — Versión inicial: 11 reglas primarias, 4 secundarias, 20 compuestos de validación; despliegue PM2/Nginx y Dokploy.
