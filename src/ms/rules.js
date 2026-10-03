@@ -395,6 +395,22 @@ function sigmaCC(g) {
   return out;
 }
 
+/**
+ * Energía de ionización vertical aproximada (eV) de un alqueno/aleno neutro, para repartir la carga
+ * entre los dos fragmentos de un McLafferty de alqueno según la regla de Stevenson.
+ * Valores de referencia (NIST WebBook): eteno 10.51, propeno 9.73, 1-buteno 9.55, 1-penteno 9.49,
+ * 1-hexeno 9.44; cada sustituyente alquilo adicional sobre los C sp² la reduce ≈ 0.3–0.4 eV
+ * (E-2-buteno 9.10, isobuteno 9.22, 2-metil-2-buteno 8.69). Aleno 9.69.
+ */
+function alkeneIE(g, atoms, a, b) {
+  const nC = [...atoms].filter(i => g.isC(i)).length;
+  const base = { 2: 10.51, 3: 9.73, 4: 9.55, 5: 9.49, 6: 9.44 }[nC] ?? 9.40;
+  const subs = [a, b].reduce((s, c) => s + g.atoms[c].nbrs.filter(n => atoms.has(n.atom) && n.atom !== a && n.atom !== b && g.isC(n.atom)).length, 0);
+  return base - 0.35 * Math.max(0, subs - (nC >= 3 ? 1 : 0));
+}
+/** Fracción de la carga retenida en el fragmento 1 (Stevenson, reparto tipo Boltzmann con kT efectivo 0,25 eV). */
+const stevensonShare = (ie1, ie2) => 1 / (1 + Math.exp((ie1 - ie2) / 0.25));
+
 /* ------------------------------------------------------------------ */
 /* 8. Reordenamiento de McLafferty (transferencia γ-H, escisión β)     */
 /* ------------------------------------------------------------------ */
@@ -414,8 +430,8 @@ function mclafferty(g) {
       const [x, y] = A.el === 'N' ? [b.a, b.b] : [b.b, b.a];
       acceptors.push({ x, y, kind: 'nitrilo', base: 1.3, bond: b.idx });
     } else if (b.order === 2 && A.el === 'C' && Bt.el === 'C') {
-      acceptors.push({ x: b.a, y: b.b, kind: 'alqueno', base: 0.9, bond: b.idx });
-      acceptors.push({ x: b.b, y: b.a, kind: 'alqueno', base: 0.9, bond: b.idx });
+      acceptors.push({ x: b.a, y: b.b, kind: 'alqueno', base: 2.2, bond: b.idx });
+      acceptors.push({ x: b.b, y: b.a, kind: 'alqueno', base: 2.2, bond: b.idx });
     } else if (b.order === 3 && A.el === 'C' && Bt.el === 'C') {
       // alquinos: McLafferty "tipo alqueno" con formación de un radical-catión aleno de masa par (Beauchamp, alquinos §5)
       acceptors.push({ x: b.a, y: b.b, kind: 'alquino', base: 0.75, bond: b.idx });
@@ -467,6 +483,16 @@ function mclafferty(g) {
           let score = acc.base;
           if (alkoxySide) score = acylConj ? 1.0 : 0.15;
           if (gaHet) score = 2.2;
+          // McLafferty de alqueno/alquino: ambos fragmentos son alquenos (o aleno) de EI parecida → reparto de carga por Stevenson
+          // (Beauchamp, alquenos §4: 1-hepteno → 56 [C₄H₈⁺•, 100 %] > 42 [C₃H₆⁺•, 55 %])
+          let shareIon = null;
+          if ((acc.kind === 'alqueno' || acc.kind === 'alquino') && !gaHet) {
+            const ieIon = acc.kind === 'alquino' ? 9.69 - 0.3 * Math.max(0, [...ionAt].filter(i => g.isC(i)).length - 3) : alkeneIE(g, ionAt, y, al);
+            const ieNeu = alkeneIE(g, neuAt, be, ga);
+            shareIon = stevensonShare(ieIon, ieNeu);
+          }
+          const total = score;
+          if (shareIon != null) score = total * shareIon;
           if (alkoxySide && g.atoms[be].h > 0) {
             // McLafferty + 1: doble transferencia de H → ácido protonado RC(OH)2⁺ (EE)
             const ionP = new Species(g, ionAt, { dH: new Map([[x, 1], [al, 1]]), bo: new Map([[acc.bond, 1]]), chg: new Map([[y, 1]]), tags: { mclPlus1: true } });
@@ -496,7 +522,8 @@ function mclafferty(g) {
               `Estado de transición cíclico de seis miembros: ${L(g, x)}=${L(g, y)}–${L(g, al)}–${L(g, be)}–${L(g, ga)}–H.`,
               `Transferencia 1,5 del hidrógeno γ (en ${L(g, ga)}) al sitio radical ${L(g, x)} (↷).`,
               `Escisión β del enlace ${B(g, al, be)} (↷): se elimina la molécula neutra ${neu.formulaString} (alqueno) y se forma un ${ionTxt} de masa par (ion impar-electrónico, OE⁺•).`,
-              'Los iones OE⁺• de masa par (sin N) son diagnósticos de reordenamientos; requiere un H en posición γ accesible.'
+              'Los iones OE⁺• de masa par (sin N) son diagnósticos de reordenamientos; requiere un H en posición γ accesible.',
+              ...(shareIon != null ? [`Ambos productos son alquenos: la carga se reparte según su energía de ionización (regla de Stevenson); fracción estimada en ${ion.formulaString}⁺•: ${(100 * shareIon).toFixed(0)} %.`] : [])
             ],
             refs: ['MCL59', 'MT', 'GROSS']
           }));
@@ -506,12 +533,13 @@ function mclafferty(g) {
           out.push(ev({
             rule: 'mclaffertyAlk', ruleName: 'McLafferty con retención de carga en el alqueno', ion: ion2, neutral: neu2,
             neutralLabel: `${acc.kind === 'carbonyl' ? 'enol' : 'neutro'} ${neu2.formulaString}`, cleaved: [nb.bond], oe: true,
-            score: alkoxySide ? (neuAt.size >= 3 ? 0.45 * Math.min(neuAt.size, 6) / 2 : 0.01) : score * 0.08 * Math.min(neuAt.size, 6) / 2,
+            score: shareIon != null ? total * (1 - shareIon) : alkoxySide ? (neuAt.size >= 3 ? 0.45 * Math.min(neuAt.size, 6) / 2 : 0.01) : score * 0.08 * Math.min(neuAt.size, 6) / 2,
             steps: [
               'Mismo estado de transición de seis miembros que el reordenamiento de McLafferty.',
+              ...(shareIon != null ? [`Fragmentos alqueno/alqueno: la carga se reparte por la regla de Stevenson; fracción estimada en ${ion2.formulaString}⁺•: ${(100 * (1 - shareIon)).toFixed(0)} % (p. ej., 1-hepteno: C₄H₈⁺• m/z 56 = pico base, C₃H₆⁺• m/z 42 ≈ 55 %).`] : []),
               `La carga queda en el fragmento alqueno ${ion2.formulaString}⁺• cuando su energía de ionización es comparable o menor que la del enol (regla de Stevenson).`
             ],
-            refs: ['STEV', 'MT']
+            refs: shareIon != null ? ['STEV', 'MT', 'BEAU'] : ['STEV', 'MT']
           }));
         }
       }
