@@ -33,6 +33,9 @@ function cationClass(g, atoms, c) {
   if (o != null && atoms.has(o)) {
     const het = a.nbrs.find(n => atoms.has(n.atom) && n.atom !== o && ['O', 'N'].includes(g.atoms[n.atom].el));
     if (het) return { cls: 'acylium-het', score: 0.9, label: g.atoms[het.atom].el === 'O' ? 'ion alcoxicarbonilo (+O≡C–OR)' : 'ion carbamoilo (+O≡C–NR₂)' };
+    // ion halocarbonilo (X–C≡O⁺, p. ej. ClCO⁺ m/z 63): el halógeno desestabiliza el acilio frente a R–C≡O⁺
+    const hal = a.nbrs.find(n => atoms.has(n.atom) && ['F', 'Cl', 'Br', 'I'].includes(g.atoms[n.atom].el));
+    if (hal) return { cls: 'acylium-hal', score: 0.45, label: 'ion halocarbonilo (X–C≡O⁺)' };
     return { cls: 'acylium', score: 2.3, label: 'ion acilio (R–C≡O⁺)' };
   }
   let best = null;
@@ -57,6 +60,13 @@ function cationClass(g, atoms, c) {
       const dbl = nb.nbrs.find(m => m.atom !== c && atoms.has(m.atom) && g.bonds[m.bond].order === 2 && g.atoms[m.atom].el === 'C');
       if (dbl) {
         const cand = { cls: 'allyl', score: 1.15, label: 'catión alilo (estabilizado por resonancia)' };
+        if (!best || cand.score > best.score) best = cand;
+      }
+      // catión propargilo (C≡C–C⁺ ↔ ⁺C=C=C): resonancia menos eficaz que en el alilo porque la forma
+      // alenilo coloca la carga en un carbono sp más electronegativo (Beauchamp, MS chapter, alquinos §3)
+      const tpl = nb.nbrs.find(m => m.atom !== c && atoms.has(m.atom) && g.bonds[m.bond].order === 3 && g.atoms[m.atom].el === 'C');
+      if (tpl) {
+        const cand = { cls: 'propargyl', score: 0.9, label: 'catión propargilo ⇄ ciclopropenilo (C₃H₃⁺ aromático)' };
         if (!best || cand.score > best.score) best = cand;
       }
     }

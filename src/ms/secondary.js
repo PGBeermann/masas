@@ -128,6 +128,42 @@ function secondary(e) {
     }
   }
 
+  // (3b) Cationes alilo/propargilo CₙH₂ₙ₋₁⁺ → −H₂ (series 41→39, 55→53, 69→67; Beauchamp, alcanos §7 y alquinos §3)
+  if ((ion.tags.allyl || ion.tags.allylic) && f.C >= 3 && f.C <= 5 && f.H === 2 * f.C - 1 && Object.keys(f).length === 2) {
+    const n = f.C;
+    out.push(child(e, { rule: 'allylH2', ruleName: 'Pérdida de H₂ en cationes alilo (→ C₃H₃⁺ ciclopropenilo y homólogos)', ion: fo(g, { C: n, H: 2 * n - 3 }), neutral: null,
+      neutralFormula: { H: 2 }, neutralLabel: 'H₂', k: n === 3 ? 0.3 : 0.15,
+      steps: [`El catión ${fs}⁺ (m/z ${14 * n - 1}) elimina H₂ y genera C${n}H${2 * n - 3}⁺ (m/z ${14 * n - 3}); para n = 3 se obtiene el catión ciclopropenilo aromático (m/z 39), presente en casi todos los espectros EI.`],
+      refs: ['BEAU', 'MT'] }));
+  }
+
+  // (3c) Doble reordenamiento de McLafferty en cetonas con H γ en ambas cadenas (Beauchamp, carbonilos, 4-octanona)
+  const mt = ion.tags.mclafferty;
+  if (mt && typeof mt === 'object' && mt.kind === 'carbonyl' && !ion.formulaOverride && e.generation === 1) {
+    const { x, y, al } = mt;
+    for (const n2 of g.atoms[y].nbrs) {
+      const al2 = n2.atom;
+      if (al2 === x || al2 === al || !ion.atoms.has(al2) || !g.isC(al2) || !g.isSp3(al2)) continue;
+      for (const nb of g.atoms[al2].nbrs) {
+        const be = nb.atom;
+        if (be === y || !ion.atoms.has(be) || !g.isC(be) || !g.isSp3(be) || g.bonds[nb.bond].inRing) continue;
+        const ga = g.atoms[be].nbrs.find(m => m.atom !== al2 && ion.atoms.has(m.atom) && g.isC(m.atom) && g.isSp3(m.atom) && g.atoms[m.atom].h > 0);
+        if (!ga) continue;
+        const side = g.sideOf(nb.bond, be, ion.atoms);
+        if (!side || side.has(y)) continue;
+        const atoms = new Set([...ion.atoms].filter(a => !side.has(a)));
+        const dH = new Map(ion.dH); dH.set(al2, (dH.get(al2) || 0) + 1);
+        const ni = new Species(g, atoms, { dH, bo: new Map(ion.bo), oddElectron: true, depictAsNeutral: true, tags: {} });
+        const neu = new Species(g, side, { dH: new Map([[ga.atom, -1]]), bo: new Map([[g.bondBetween(be, ga.atom), 2]]) });
+        out.push(child(e, { rule: 'mcl2', ruleName: 'Segundo reordenamiento de McLafferty (doble McLafferty)', ion: ni, neutral: neu, neutralLabel: `alqueno ${neu.formulaString}`, k: 0.15, oe: true,
+          steps: [`El ion enólico ${fs}⁺• conserva una segunda cadena con H γ (${L(g, ga.atom)}) sobre el carbono ${L(g, y)}.`,
+            `Nueva transferencia 1,5 de H (estado de transición de 6 miembros) y escisión β de ${B(g, al2, be)}: se elimina ${neu.formulaString} y se forma ${ni.formulaString}⁺• (m/z ${ni.nominal}, masa par).`,
+            'En cetonas dialquílicas con H γ en ambos lados se observan los dos McLafferty simples y el doble (p. ej., 4-octanona: 128 → 100/86 → 58).'],
+          refs: ['BEAU', 'MCL59', 'MT'] }));
+      }
+    }
+  }
+
   // (4) Iones aromáticos característicos
   const simple = (from, toF, lossF, lossLabel, k, txt) => {
     if (fs !== from) return;

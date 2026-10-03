@@ -13,6 +13,7 @@ module.exports = {
   RDA: 'Tureček, F.; Hanuš, V. Retro-Diels–Alder reaction in mass spectrometry. Mass Spectrom. Rev. 1984, 3, 85–152.',
   ALCOH: 'Friedel, R. A.; Shultz, J. L.; Sharkey, A. G. Mass spectra of alcohols. Anal. Chem. 1956, 28, 926–934.',
   NIST: 'NIST Chemistry WebBook, NIST Standard Reference Database 69 (espectros EI de referencia). https://webbook.nist.gov',
+  BEAU: 'Beauchamp, P. Basics of Mass Spectroscopy (capítulo del Spectroscopy Workbook). California State Polytechnic University, Pomona; material docente (MS_chapter.pdf): patrones de fragmentación por grupo funcional.',
   DISTONIC: 'Yates, B. F.; Bouma, W. J.; Radom, L. Distonic radical cations: guidelines for the assessment of their stability. Tetrahedron 1986, 42, 6225–6234.',
   ORTHO: 'Schwarz, H. Some newer aspects of mass spectrometric ortho effects. Top. Curr. Chem. 1978, 73, 231–263.',
   EVEN: 'Karni, M.; Mandelbaum, A. The \'even-electron rule\'. Org. Mass Spectrom. 1980, 15, 53–64.',

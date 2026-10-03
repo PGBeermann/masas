@@ -18,6 +18,7 @@ const { isotopePattern } = require('../chem/isotopes');
 const { Species } = require('./species');
 const { PRIMARY_RULES, clean } = require('./rules');
 const { EXT_RULES } = require('./rules_ext');
+const { BEAU_RULES, derivedAlkeneEvents } = require('./rules_beauchamp');
 const { secondary } = require('./secondary');
 const REFS = require('./references');
 
@@ -50,6 +51,7 @@ function molecularIonFactor(g) {
     }
     if (['Cl', 'Br', 'I'].includes(a.el) && a.nbrs.length && !g.atoms[a.nbrs[0].atom].aromatic) { pen *= { Cl: 0.3, Br: 0.25, I: 0.8 }[a.el]; notes.push('haluro de alquilo'); }
     if (a.el === 'N' && g.tripleBondPartner(a.idx, 'C') != null && !a.nbrs.some(n => g.atoms[n.atom].aromatic)) { pen *= 0.15; notes.push('nitrilo alifático'); }
+    if (a.el === 'C' && a.h === 1 && g.tripleBondPartner(a.idx, 'C') != null) { pen *= 0.1; notes.push('alquino terminal'); }
     if (a.el === 'C' && !a.aromatic && g.isSp3(a.idx) && !g.inRing(a.idx)) {
       const cdeg = a.nbrs.filter(n => g.isC(n.atom)).length;
       if (cdeg === 4) pen *= 0.12; else if (cdeg === 3) pen *= 0.45;
@@ -97,7 +99,7 @@ function predict(RDKit, smilesIn, opts = {}) {
 
     // ---------- reglas primarias ----------
     let events = [];
-    for (const rule of [...PRIMARY_RULES, ...EXT_RULES]) {
+    for (const rule of [...PRIMARY_RULES, ...EXT_RULES, ...BEAU_RULES]) {
       try { events.push(...rule(g)); } catch (e) { /* regla no aplicable */ }
     }
     events.push(...aromaticCore(g));
@@ -113,6 +115,10 @@ function predict(RDKit, smilesIn, opts = {}) {
         if (gen >= 4) continue;
         let kids = [];
         try { kids = secondary(e); } catch (_) { kids = []; }
+        // iones alqueno OE⁺• formados por eliminación o McLafferty → fragmentación alquénica consecutiva (Beauchamp)
+        if (e.ion.tags && e.ion.tags.alkeneIon && !e.derived && gen <= 2) {
+          try { kids.push(...derivedAlkeneEvents(RDKit, e)); } catch (_) { /* no aplicable */ }
+        }
         let kSum = 0;
         for (const c of kids) { c.score = e.score * c.k; kSum += c.k; next.push(c); }
         if (kSum) e.score *= Math.max(0.35, 1 - 0.5 * kSum);
@@ -223,7 +229,7 @@ function predict(RDKit, smilesIn, opts = {}) {
       spectrum, explanations,
       parentSvg: parentSvgFor([]),
       references: [...usedRefs].map(k => ({ key: k, text: REFS[k] })).filter(r => r.text),
-      meta: { engine: 'EI-MS rule-based predictor v1.1', rdkit: RDKit.version(), events: all.length, ms: Date.now() - t0,
+      meta: { engine: 'EI-MS rule-based predictor v1.2', rdkit: RDKit.version(), events: all.length, ms: Date.now() - t0,
         disclaimer: 'Intensidades semicuantitativas derivadas de reglas mecanísticas (EI 70 eV). Validar con espectros de referencia (NIST/Wiley).' }
     };
     return result;

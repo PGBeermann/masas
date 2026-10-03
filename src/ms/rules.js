@@ -11,7 +11,7 @@
 const { Species } = require('./species');
 const { cationClass, radicalClass, ONIUM } = require('./stability');
 
-const L = (g, i) => `${g.atoms[i].el}${i}`;            // etiqueta de átomo (índice del dibujo)
+const L = (g, i) => (g.label ? g.label(i) : `${g.atoms[i].el}${i}`); // etiqueta de átomo (índice del dibujo original)
 const B = (g, i, j) => `${L(g, i)}–${L(g, j)}`;
 
 function allAtoms(g) { return new Set(g.atoms.map(a => a.idx)); }
@@ -169,6 +169,7 @@ function carbonyl(g) {
 function classifyCarbonyl(g, ci, o) {
   const nb = g.atoms[ci].nbrs.filter(n => n.atom !== o).map(n => g.atoms[n.atom]);
   const hasO = nb.some(a => a.el === 'O'); const hasN = nb.some(a => a.el === 'N');
+  if (nb.some(a => ['F', 'Cl', 'Br', 'I'].includes(a.el))) return 'haluro de ácido';
   if (hasO) return nb.some(a => a.el === 'O' && a.h > 0) ? 'ácido carboxílico' : 'éster';
   if (hasN) return 'amida';
   if (g.atoms[ci].h > 0) return 'aldehído';
@@ -217,46 +218,65 @@ function inductive(g) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. Ion halonio cíclico (haluros primarios de cadena larga)          */
+/* 4. Iones onio cíclicos de 5 y 3 miembros (Cl, Br, I, S)             */
+/*    McLafferty 1962; Beauchamp, MS chapter: halógenos §5, tioles §4   */
 /* ------------------------------------------------------------------ */
+const CYCLO_ONIUM = {
+  5: { Br: 1.9, Cl: 1.4, I: 0.2, S: 0.9 },
+  3: { Br: 0.12, Cl: 0.1, I: 0.05, S: 0.55 }
+};
 function haloniumCyclic(g) {
-  const out = [];
+  const out = []; const seen = new Set();
   for (const X of g.atoms) {
-    if (!['Cl', 'Br'].includes(X.el) || X.nbrs.length !== 1) continue;
-    const c1 = X.nbrs[0].atom; if (!g.isC(c1) || !g.isSp3(c1) || g.atoms[c1].h < 2) continue;
-    // camino X–C1–C2–C3–C4–C5
-    const paths = [];
-    const walk = (path) => {
-      if (path.length === 5) { paths.push(path.slice()); return; }
-      const last = path[path.length - 1];
-      for (const n of g.atoms[last].nbrs) {
-        if (path.includes(n.atom) || n.atom === X.idx) continue;
-        if (!g.isC(n.atom) || !g.isSp3(n.atom) || g.bonds[n.bond].inRing) continue;
-        path.push(n.atom); walk(path); path.pop();
+    if (!['Cl', 'Br', 'I', 'S'].includes(X.el) || X.aromatic) continue;
+    if (X.el !== 'S' && X.nbrs.length !== 1) continue;
+    if (X.el === 'S' && (!g.isSp3(X.idx) || X.nbrs.length > 2 || X.nbrs.some(n => !g.isC(n.atom)))) continue;
+    for (const nx of X.nbrs) {
+      const c1 = nx.atom;
+      if (!g.isC(c1) || !g.isSp3(c1) || g.atoms[c1].aromatic || g.atoms[c1].h < 2 || g.bonds[nx.bond].inRing) continue;
+      const paths = [];
+      const walk = (path) => {
+        if (path.length === 3 || path.length === 5) paths.push(path.slice());
+        if (path.length === 5) return;
+        const last = path[path.length - 1];
+        for (const n of g.atoms[last].nbrs) {
+          if (path.includes(n.atom) || n.atom === X.idx) continue;
+          if (!g.isC(n.atom) || !g.isSp3(n.atom) || g.bonds[n.bond].inRing) continue;
+          path.push(n.atom); walk(path); path.pop();
+        }
+      };
+      walk([c1]);
+      for (const p of paths) {
+        const ring = p.length === 5 ? 5 : 3;
+        const cr = p[p.length - 2]; const cx = p[p.length - 1];  // cr cierra el anillo con X; se rompe cr–cx
+        const bi = g.bondBetween(cr, cx);
+        const parts = split(g, bi, cr); if (!parts) continue;
+        const [ionAt, neuAt] = parts;
+        if (!ionAt.has(X.idx)) continue;
+        const key = ring + ':' + [...ionAt].sort((a, b) => a - b).join(',');
+        if (seen.has(key)) continue; seen.add(key);
+        const rc = radicalClass(g, neuAt, cx);
+        const ion = new Species(g, ionAt, { extraBonds: [{ a: X.idx, b: cr, order: 1 }], chg: new Map([[X.idx, 1]]), tags: { cyclicOnium: ring } });
+        const neu = new Species(g, neuAt, { rad: new Map([[cx, 1]]) });
+        const nm = { Br: 'bromonio', Cl: 'cloronio', I: 'yodonio', S: 'sulfonio' }[X.el];
+        const prod = ring === 5 ? (X.el === 'S' ? 'tiolanio (tetrahidrotiofenio)' : 'tetrahidrohalogenonio') : (X.el === 'S' ? 'tiiranio' : 'halogenonio de 3 miembros (tipo etilenhalonio)');
+        out.push(ev({
+          rule: ring === 5 ? 'halonium' : 'onium3', ruleName: `Ciclación con desplazamiento: ion ${nm} cíclico de ${ring} miembros`,
+          ion, neutral: neu, neutralLabel: rc.label, cleaved: [bi], oe: false,
+          score: CYCLO_ONIUM[ring][X.el] * rc.score,
+          steps: [
+            `Ionización en el ${X.el === 'S' ? 'azufre' : 'halógeno'} ${L(g, X.idx)} (electrón n).`,
+            ring === 5
+              ? `El radical-catión de ${L(g, X.idx)} ataca intramolecularmente a ${L(g, cr)} (estado de transición de 5 miembros, desplazamiento rC).`
+              : `El par libre de ${L(g, X.idx)} puentea al carbono β ${L(g, cr)} (escisión β asistida, anillo de 3 miembros).`,
+            `Se rompe homolíticamente ${B(g, cr, cx)}, se expulsa ${rc.label} y se forma el ion ${prod} ${ion.formulaString}⁺ (m/z ${ion.nominal}).`,
+            ring === 5
+              ? 'Pico característico de cadenas de ≥ C₅ con Cl, Br, I o S: m/z 91/93 (Cl), 135/137 (Br), 183 (I), 89 + R (S).'
+              : 'Ion diagnóstico menor: m/z 63/65 (Cl), 107/109 (Br), 155 (I), 61 + R (S).'
+          ],
+          refs: X.el === 'S' ? ['MT', 'BEAU'] : ['HALIDES', 'MT', 'BEAU']
+        }));
       }
-    };
-    walk([c1]);
-    for (const p of paths) {
-      const [, , , c4, c5] = p;
-      const bi = g.bondBetween(c4, c5);
-      const parts = split(g, bi, c4); if (!parts) continue;
-      const [ionAt, neuAt] = parts;
-      if (!ionAt.has(X.idx)) continue;
-      const rc = radicalClass(g, neuAt, c5);
-      const ion = new Species(g, ionAt, { extraBonds: [{ a: X.idx, b: c4, order: 1 }], chg: new Map([[X.idx, 1]]) });
-      const neu = new Species(g, neuAt, { rad: new Map([[c5, 1]]) });
-      out.push(ev({
-        rule: 'halonium', ruleName: `Ciclación con desplazamiento: ion ${X.el === 'Br' ? 'bromonio' : 'cloronio'} cíclico de 5 miembros`,
-        ion, neutral: neu, neutralLabel: rc.label, cleaved: [bi], oe: false,
-        score: (X.el === 'Br' ? 1.9 : 1.4) * rc.score,
-        steps: [
-          `Ionización en el halógeno ${L(g, X.idx)} (electrón n).`,
-          `El radical-catión del halógeno ataca intramolecularmente a ${L(g, c4)} (estado de transición de 5 miembros, rC₄).`,
-          `Se rompe homolíticamente ${B(g, c4, c5)}, expulsando ${rc.label}, y se forma el ion halonio cíclico (tetrahidrohalogenonio) C₄H₈X⁺.`,
-          'Es el pico característico (a menudo base) de 1-bromo- y 1-cloroalcanos con ≥ 6 carbonos (m/z 135/137 para Br; 91/93 para Cl).'
-        ],
-        refs: ['HALIDES', 'MT']
-      }));
     }
   }
   return out;
@@ -274,36 +294,43 @@ function benzylicAllylic(g) {
     if (!arNb) {
       for (const n of cb.nbrs) {
         if (!g.isC(n.atom) || g.atoms[n.atom].aromatic) continue;
-        const d = g.atoms[n.atom].nbrs.find(m => m.atom !== cb.idx && g.bonds[m.bond].order === 2 && g.isC(m.atom) && !g.bonds[m.bond].aromatic);
-        if (d) { allylNb = { atom: n.atom, dbl: d.atom }; break; }
+        const d = g.atoms[n.atom].nbrs.find(m => m.atom !== cb.idx && g.bonds[m.bond].order === 2 && g.isC(m.atom) && !g.bonds[m.bond].aromatic)
+          || g.atoms[n.atom].nbrs.find(m => m.atom !== cb.idx && g.bonds[m.bond].order === 3 && g.isC(m.atom));
+        if (d) { allylNb = { atom: n.atom, dbl: d.atom, triple: g.bonds[g.bondBetween(n.atom, d.atom)].order === 3 }; break; }
       }
     }
     const anchor = arNb ? arNb.atom : allylNb ? allylNb.atom : null;
     if (anchor == null) continue;
     const isBenz = !!arNb;
+    const isProp = !isBenz && allylNb.triple;
     for (const nr of cb.nbrs) {
       if (nr.atom === anchor || g.bonds[nr.bond].inRing) continue;
       const parts = split(g, nr.bond, cb.idx); if (!parts) continue;
       const [ionAt, neuAt] = parts;
       const cc = cationClass(g, ionAt, cb.idx); const rc = radicalClass(g, neuAt, nr.atom);
-      const ion = new Species(g, ionAt, { chg: new Map([[cb.idx, 1]]), tags: { benzyl: isBenz, allyl: !isBenz } });
+      const ion = new Species(g, ionAt, { chg: new Map([[cb.idx, 1]]), tags: { benzyl: isBenz, allyl: !isBenz && !isProp, propargyl: isProp } });
       const neu = new Species(g, neuAt, { rad: new Map([[nr.atom, 1]]) });
       const isTrop = isBenz && ion.formulaString === 'C7H7';
       out.push(ev({
-        rule: isBenz ? 'benzylic' : 'allylic', ruleName: isBenz ? 'Escisión bencílica (β al anillo) → ion bencilo/tropilio' : 'Escisión alílica',
+        rule: isBenz ? 'benzylic' : isProp ? 'propargylic' : 'allylic',
+        ruleName: isBenz ? 'Escisión bencílica (β al anillo) → ion bencilo/tropilio' : isProp ? 'Escisión propargílica (→ C₃H₃⁺ y homólogos)' : 'Escisión alílica',
         ion, neutral: neu, neutralLabel: rc.label, cleaved: [nr.bond], oe: false,
-        score: isBenz ? 2.4 * Math.max(cc.score, 2.5) * Math.pow(rc.score, 0.3) : Math.max(cc.score, 1.15) * 0.8 * rc.score,
+        score: isBenz ? 2.4 * Math.max(cc.score, 2.5) * Math.pow(rc.score, 0.3) : isProp ? Math.max(cc.score, 0.9) * 0.6 * Math.pow(rc.score, 0.3) : Math.max(cc.score, 1.15) * 0.8 * rc.score,
         steps: isBenz ? [
           `Ionización: remoción de un electrón π del anillo aromático (sistema de menor EI) → M⁺• deslocalizado.`,
           `Escisión del enlace ${B(g, cb.idx, nr.atom)}, β respecto al anillo (posición bencílica): el catión bencílico en ${L(g, cb.idx)} queda estabilizado por resonancia con el anillo; se expulsa ${rc.label}.`,
           isTrop ? 'El catión bencilo C₇H₇⁺ (m/z 91) se isomeriza al ion tropilio aromático (6 electrones π, regla de Hückel), responsable de la gran intensidad de m/z 91 en alquilbencenos.'
             : 'El catión bencílico sustituido puede expandirse a un ion tropilio sustituido.'
+        ] : isProp ? [
+          `Ionización: remoción de un electrón π del triple enlace C≡C (${L(g, anchor)}≡${L(g, allylNb.dbl)}).`,
+          `Escisión del enlace propargílico ${B(g, cb.idx, nr.atom)} (β al triple enlace): se forma el catión propargilo (HC≡C–CH₂⁺ ↔ H₂C=C=CH⁺) y se expulsa ${rc.label}.`,
+          'La forma alenilo coloca la carga sobre un carbono sp (más electronegativo), por lo que la estabilización es menor que en el alilo; el ion C₃H₃⁺ (m/z 39) puede reordenarse al catión ciclopropenilo aromático (2 e⁻ π). Serie homóloga 39, 53, 67… (Δ = 14, CH₂).'
         ] : [
           `Ionización: remoción de un electrón π del doble enlace C=C (${L(g, anchor)}=${L(g, allylNb.dbl)}).`,
           `Escisión del enlace alílico ${B(g, cb.idx, nr.atom)}: se forma un catión alilo deslocalizado (C=C–C⁺ ↔ ⁺C–C=C) y se expulsa ${rc.label}.`,
           'La migración del doble enlace en el ion radical puede generar varios cationes alílicos isómeros; los alquenos dan series CₙH₂ₙ₋₁⁺ (m/z 41, 55, 69…).'
         ],
-        refs: isBenz ? ['MT', 'TROP', 'GROSS'] : ['MT', 'GROSS']
+        refs: isBenz ? ['MT', 'TROP', 'GROSS'] : ['MT', 'GROSS', 'BEAU']
       }));
     }
     // pérdida de H• bencílico (p. ej., tolueno → m/z 91)
@@ -389,6 +416,10 @@ function mclafferty(g) {
     } else if (b.order === 2 && A.el === 'C' && Bt.el === 'C') {
       acceptors.push({ x: b.a, y: b.b, kind: 'alqueno', base: 0.9, bond: b.idx });
       acceptors.push({ x: b.b, y: b.a, kind: 'alqueno', base: 0.9, bond: b.idx });
+    } else if (b.order === 3 && A.el === 'C' && Bt.el === 'C') {
+      // alquinos: McLafferty "tipo alqueno" con formación de un radical-catión aleno de masa par (Beauchamp, alquinos §5)
+      acceptors.push({ x: b.a, y: b.b, kind: 'alquino', base: 0.75, bond: b.idx });
+      acceptors.push({ x: b.b, y: b.a, kind: 'alquino', base: 0.75, bond: b.idx });
     }
   }
   // aceptor aromático: Y = C ipso, X = C orto
@@ -422,11 +453,11 @@ function mclafferty(g) {
           if (seen.has(key)) continue; seen.add(key);
           const bo = new Map();
           if (!acc.aromatic) {
-            bo.set(acc.bond, acc.kind === 'nitrilo' ? 2 : 1);
+            bo.set(acc.bond, acc.kind === 'nitrilo' || acc.kind === 'alquino' ? 2 : 1);
             bo.set(na.bond, 2);
           }
           const ion = new Species(g, ionAt, { dH: new Map([[x, 1]]), bo, oddElectron: true, depictAsNeutral: true,
-            tags: { mclafferty: true, noDepict: !!acc.aromatic } });
+            tags: { mclafferty: { x, y, al, kind: acc.kind }, noDepict: !!acc.aromatic, alkeneIon: acc.kind === 'alqueno' && !gaHet } });
           const bg = g.bondBetween(be, ga);
           const neu = new Species(g, neuAt, { dH: new Map([[ga, -1]]), bo: new Map([[bg, 2]]) });
           const famTxt = acc.kind === 'carbonyl' ? classifyCarbonyl(g, y, x) : acc.kind;
@@ -455,7 +486,7 @@ function mclafferty(g) {
             }));
           }
           if (gaHet) ion.tags.benzylHtransfer = true;
-          const ionTxt = acc.kind === 'carbonyl' ? 'radical-catión enólico' : acc.kind === 'aromático' ? 'radical-catión metilenciclohexadieno (isotolueno)' : 'radical-catión par-másico';
+          const ionTxt = acc.kind === 'carbonyl' ? 'radical-catión enólico' : acc.kind === 'aromático' ? 'radical-catión metilenciclohexadieno (isotolueno)' : acc.kind === 'alquino' ? 'radical-catión aleno' : 'radical-catión par-másico';
           out.push(ev({
             rule: 'mclafferty', ruleName: gaHet ? `Escisión bencílica/alílica con transferencia de H desde ${g.atoms[ga].el} (McLafferty ${famTxt})` : `Reordenamiento de McLafferty (${famTxt}${alkoxySide ? ', lado alcoxilo' : ''})`,
             ion, neutral: neu, neutralLabel: gaHet ? `${g.atoms[ga].el === 'O' ? 'aldehído/cetona' : 'imina'} ${neu.formulaString}` : `alqueno ${neu.formulaString}`,
@@ -470,7 +501,7 @@ function mclafferty(g) {
             refs: ['MCL59', 'MT', 'GROSS']
           }));
           // carga retenida en el alqueno (minoritaria)
-          const ion2 = neu.clone({ oddElectron: true, depictAsNeutral: true, tags: { mclaffertyAlkene: true } });
+          const ion2 = neu.clone({ oddElectron: true, depictAsNeutral: true, tags: { mclaffertyAlkene: true, alkeneIon: !gaHet } });
           const neu2 = ion.clone();
           out.push(ev({
             rule: 'mclaffertyAlk', ruleName: 'McLafferty con retención de carga en el alqueno', ion: ion2, neutral: neu2,
@@ -551,7 +582,7 @@ function neutralLosses(g) {
         const cb = g.atoms[ca].nbrs.find(n => n.atom !== X.idx && g.isC(n.atom) && g.atoms[n.atom].h > 0 && g.isSp3(n.atom));
         if (cb) {
           const nC = g.atoms.filter(a => a.el === 'C').length;
-          const ion = new Species(g, minus([X.idx]), { dH: new Map([[cb.atom, -1]]), bo: new Map([[g.bondBetween(ca, cb.atom), 2]]), oddElectron: true, depictAsNeutral: true, tags: { cycloalkene: g.inRing(ca) } });
+          const ion = new Species(g, minus([X.idx]), { dH: new Map([[cb.atom, -1]]), bo: new Map([[g.bondBetween(ca, cb.atom), 2]]), oddElectron: true, depictAsNeutral: true, tags: { cycloalkene: g.inRing(ca), alkeneIon: !g.inRing(ca) } });
           mk({ rule: 'lossH2O', ruleName: X.el === 'O' ? 'Eliminación de H₂O (alcohol)' : 'Eliminación de H₂S (tiol)', ion, neutral: null,
             neutralFormula: X.el === 'O' ? { H: 2, O: 1 } : { H: 2, S: 1 }, neutralLabel: X.el === 'O' ? 'H₂O' : 'H₂S',
             score: (X.el === 'O' ? 0.7 : 0.4) * (nC >= 4 ? 1.0 : 0.5) * (g.inRing(ca) ? 2.5 : [1, 1, 0.3, 0.12][Math.min(3, g.atoms[ca].nbrs.filter(n => g.isC(n.atom)).length)]),
@@ -570,7 +601,7 @@ function neutralLosses(g) {
       if (!g.atoms[ca].aromatic && g.isSp3(ca)) {
         const cb = g.atoms[ca].nbrs.find(n => n.atom !== X.idx && g.isC(n.atom) && g.atoms[n.atom].h > 0 && g.isSp3(n.atom));
         if (cb) {
-          const ion = new Species(g, minus([X.idx]), { dH: new Map([[cb.atom, -1]]), bo: new Map([[g.bondBetween(ca, cb.atom), 2]]), oddElectron: true, depictAsNeutral: true });
+          const ion = new Species(g, minus([X.idx]), { dH: new Map([[cb.atom, -1]]), bo: new Map([[g.bondBetween(ca, cb.atom), 2]]), oddElectron: true, depictAsNeutral: true, tags: { alkeneIon: true } });
           mk({ rule: 'lossHX', ruleName: `Eliminación de H${X.el}`, ion, neutral: null, neutralFormula: { H: 1, [X.el]: 1 }, neutralLabel: `H${X.el}`,
             score: { Cl: 0.45, Br: 0.12, F: 0.7 }[X.el],
             steps: [`Ionización en el halógeno ${L(g, X.idx)}.`, `Abstracción de un H vecinal y eliminación de H${X.el} neutro, dando el radical-catión del alqueno ([M−H${X.el}]⁺•).`],
@@ -689,4 +720,4 @@ function carbocycleOpening(g) {
 
 const PRIMARY_RULES = [carbocycleOpening, alphaHetero, carbonyl, inductive, haloniumCyclic, benzylicAllylic, sigmaCC, mclafferty, retroDielsAlder, neutralLosses];
 
-module.exports = { PRIMARY_RULES, isSaturatedAlkyl, clean, L, B, ev, split, allAtoms, classifyCarbonyl, ewgOnRing };
+module.exports = { PRIMARY_RULES, isSaturatedAlkyl, clean, L, B, ev, split, allAtoms, complement, classifyCarbonyl, ewgOnRing, benzylicAllylic, mclafferty };
