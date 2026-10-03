@@ -39,6 +39,22 @@ class MolGraph {
     this.rdkitMol = rdkitMol || null;
   }
 
+  /**
+   * Copia profunda del grafo (mismos índices de átomos y enlaces). Se usa para generar
+   * isómeros del radical-catión (p. ej., migración del doble/triple enlace) sin alterar M.
+   */
+  clone() {
+    const c = Object.create(MolGraph.prototype);
+    c.rings = this.rings.map(r => r.slice());
+    c.atoms = this.atoms.map(a => ({ ...a, nbrs: a.nbrs.map(n => ({ ...n })), rings: a.rings.slice() }));
+    c.bonds = this.bonds.map(b => ({ ...b }));
+    c.rdkitMol = null;
+    c.isomerOf = this.isomerOf || this;
+    return c;
+  }
+  /** Etiqueta del átomo: conserva el índice del dibujo de la molécula original (campo orig) si existe. */
+  label(i) { const a = this.atoms[i]; return `${a.el}${a.orig ?? i}`; }
+
   get n() { return this.atoms.length; }
   bondBetween(i, j) { const x = this.atoms[i].nbrs.find(n => n.atom === j); return x ? x.bond : null; }
   bond(i, j) { const b = this.bondBetween(i, j); return b == null ? null : this.bonds[b]; }
