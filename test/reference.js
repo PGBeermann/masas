@@ -20,5 +20,16 @@ module.exports = [
   { name: 'nitrobenceno', smiles: 'O=[N+]([O-])c1ccccc1', ref: { 77: 100, 123: 60, 51: 55, 93: 15, 65: 15 } },
   { name: 'fenol', smiles: 'Oc1ccccc1', ref: { 94: 100, 66: 30, 65: 25, 39: 15 } },
   { name: 'benceno', smiles: 'c1ccccc1', ref: { 78: 100, 77: 20, 52: 20, 51: 20 } },
-  { name: '2-metilpropan-2-ol', smiles: 'CC(C)(C)O', ref: { 59: 100, 31: 30, 41: 15, 43: 12 } }
+  { name: '2-metilpropan-2-ol', smiles: 'CC(C)(C)O', ref: { 59: 100, 31: 30, 41: 15, 43: 12 } },
+  // --- v1.2: compuestos ilustrativos de Beauchamp, MS chapter (tablas del capítulo) y NIST WebBook ---
+  { name: '(E)-2-hepteno', smiles: 'C/C=C/CCCC', ref: { 55: 100, 56: 90, 41: 75, 69: 48, 98: 44, 39: 28, 27: 27, 29: 22, 43: 21, 42: 20, 70: 17 } },
+  { name: '3,4-dimetilhexano', smiles: 'CCC(C)C(C)CC', ref: { 56: 100, 57: 81, 43: 58, 41: 43, 85: 41, 29: 26 } },
+  { name: '1-butanol', smiles: 'CCCCO', ref: { 56: 100, 31: 83, 41: 66, 43: 59, 27: 33, 42: 32 } },
+  { name: 'ciclohexanol', smiles: 'OC1CCCCC1', ref: { 57: 100, 82: 46, 72: 7, 100: 3 } },
+  { name: '1-hexanotiol', smiles: 'CCCCCCS', ref: { 56: 100, 43: 48, 41: 35, 55: 35, 42: 32, 118: 30, 69: 25, 84: 16, 47: 15, 61: 10 } },
+  { name: 'butil etil sulfuro', smiles: 'CCCCSCC', ref: { 75: 100, 56: 68, 118: 56, 29: 50, 41: 49, 47: 48, 62: 47, 61: 38, 89: 25 } },
+  { name: 'hexanonitrilo', smiles: 'CCCCCC#N', ref: { 41: 100, 54: 82, 29: 43, 55: 42, 27: 33, 57: 32, 68: 30, 43: 28, 82: 24, 69: 23 } },
+  { name: '4-octanona', smiles: 'CCCCC(=O)CCC', ref: { 57: 100, 43: 73, 85: 72, 71: 70, 41: 36, 128: 23, 86: 11 } },
+  { name: '1-hepteno', smiles: 'C=CCCCCC', ref: { 56: 100, 41: 97, 55: 68, 29: 56, 42: 55, 70: 44, 57: 31, 69: 31, 39: 30, 27: 26, 43: 16, 98: 14 } },
+  { name: '1-heptino', smiles: 'C#CCCCCC', ref: { 81: 100, 41: 71, 55: 51, 29: 46, 67: 44, 54: 35, 68: 30, 39: 30, 57: 28, 56: 26 } }
 ];
