@@ -105,7 +105,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .step h4 { margin: 0 0 6px; font-size: 14px; }
 .step ol { margin: 6px 0 0; padding-left: 20px; } .step li { margin-bottom: 4px; color: var(--ink-2); }
 .eq { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
-.eq .mol { width: 200px; } .eq .mol.small { width: 150px; } .eq .mol.mech { width: 300px; }
+.eq .mol { width: 200px; } .eq .mol.small { width: 150px; } .eq .mol.mech { width: 380px; max-width: 100%; }
 .mech-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
 .mech-legend svg { vertical-align: middle; background: #fff; border-radius: 4px; }
 .eq .op { font-size: 20px; color: var(--muted); }
