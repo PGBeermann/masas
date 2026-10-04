@@ -25,6 +25,17 @@ function split(g, bondIdx, keepAtom) {
   return [side, complement(g, side)];
 }
 
+/* Mecanismo para el dibujo con flechas curvas (ver src/ms/arrows.js): ↷ = 1 e⁻, ⇒ = 2 e⁻ */
+const FH = (from, to, bend) => ({ t: 'fish', from, to, bend });
+const FL = (from, to, bend) => ({ t: 'full', from, to, bend });
+const A = (i) => ['a', i]; const Mid = (i, j) => ['m', i, j];
+/** Patrón de transferencia de H (estado de transición cíclico) + escisión β: x acepta el H de d; se rompe b1–b2; se forman d=b1' y y=al. */
+function hTransferArrows(start, x, d, dNbr, cut, formY) {
+  const arr = [FH(start, ['mH', d, x, x]), FH(['mHi', d, x], ['mH', d, x, x]), FH(['mHi', d, x], Mid(d, dNbr))];
+  if (cut) { arr.push(FH(Mid(cut[0], cut[1]), Mid(d, dNbr))); if (formY) arr.push(FH(Mid(cut[0], cut[1]), Mid(formY[0], formY[1]))); }
+  return arr;
+}
+
 function ev(o) {
   return Object.assign({ score: 0, steps: [], refs: [], children: [], generation: 1 }, o);
 }
@@ -62,6 +73,7 @@ function alphaHetero(g) {
         const fStev = (X.el === 'O' || X.el === 'S') && /bencilo/.test(rc.label) ? 0.3 : 1;
         const ionS = ONIUM[X.el] * fConj * fHal * fStev;
         out.push(ev({
+          mech: { site: { kind: 'n', a: xi }, arrows: [FH(A(xi), Mid(xi, ca)), FH(Mid(ca, nr.atom), Mid(xi, ca)), FH(Mid(ca, nr.atom), A(nr.atom))], highlightBonds: [[ca, nr.atom]] },
           rule: 'alpha', ruleName: `α-Escisión (sitio radical en ${X.el}, ${kind})`, ion, neutral: neu,
           neutralLabel: rc.label, cleaved: [nr.bond], oe: false,
           score: ionS * rc.score,
@@ -81,6 +93,7 @@ function alphaHetero(g) {
         const ion = new Species(g, allAtoms(g), { dH: new Map([[ca, -1]]), bo: new Map([[xc, 2]]), chg: new Map([[xi, 1]]),
           tags: { onium: { het: xi, c: ca } } });
         out.push(ev({
+          mech: { site: { kind: 'n', a: xi }, arrows: [FH(A(xi), Mid(xi, ca)), FH(['mHi', ca, xi], Mid(xi, ca)), FH(['mHi', ca, xi], ['H', ca, xi])] },
           rule: 'alphaH', ruleName: `α-Escisión con pérdida de H• (${X.el})`, ion,
           neutral: null, neutralFormula: { H: 1 }, neutralLabel: 'H•', cleaved: [], oe: false,
           score: ONIUM[X.el] * fConj * 0.02 * (ringX ? 8 : 1),
@@ -115,6 +128,7 @@ function carbonyl(g) {
         tags: { acylium: { c: ci, o } } });
       const aromaticNb = others.some(n => g.atoms[n.atom].aromatic);
       out.push(ev({
+        mech: { site: { kind: 'n', a: o }, arrows: [FH(A(o), Mid(o, ci)), FH(['mHi', ci, o], Mid(o, ci)), FH(['mHi', ci, o], ['H', ci, o])] },
         rule: 'alphaCO_H', ruleName: 'α-Escisión en aldehído (pérdida de H•)', ion, neutral: null, neutralFormula: { H: 1 },
         neutralLabel: 'H•', cleaved: [], oe: false, score: 2.3 * (aromaticNb ? 0.9 : 0.15),
         steps: [
@@ -135,6 +149,7 @@ function carbonyl(g) {
       const cc = cationClass(g, ionAt, ci); const rc = radicalClass(g, neuAt, r);
       const fHCO = ionAt.size === 2 && g.atoms[ci].h === 1 ? 0.25 : 1; // HCO⁺: EI(HCO•) alta frente a R•
       out.push(ev({
+        mech: { site: { kind: 'n', a: o }, arrows: [FH(A(o), Mid(o, ci)), FH(Mid(ci, r), Mid(o, ci)), FH(Mid(ci, r), A(r))], highlightBonds: [[ci, r]] },
         rule: 'alphaCO', ruleName: `α-Escisión de ${fam} (formación de ion acilio)`, ion, neutral: neu, neutralLabel: rc.label,
         cleaved: [nr.bond], oe: false, score: fHCO * cc.score * rc.score * ([...ionAt].some(i => g.atoms[i].aromatic && g.bondBetween(i, ci) != null) ? 1.5 : 1),
         steps: [
@@ -151,6 +166,7 @@ function carbonyl(g) {
         const neu2 = new Species(g, ionAt, { rad: new Map([[ci, 1]]) });
         const cc2 = cationClass(g, neuAt, r);
         out.push(ev({
+          mech: { site: { kind: 'n', a: o }, arrows: [FL(Mid(ci, r), A(ci))], highlightBonds: [[ci, r]] },
           rule: 'iCO', ruleName: `Escisión inductiva (i) en ${fam}`, ion: ion2, neutral: neu2, neutralLabel: 'radical acilo',
           cleaved: [nr.bond], oe: false, score: cc2.score * 0.85 * 0.45,
           steps: [
@@ -200,6 +216,7 @@ function inductive(g) {
       const ion = new Species(g, ionAt, { chg: new Map([[c, 1]]), tags: alkylTag(g, ionAt) });
       const neu = new Species(g, neuAt, { rad: new Map([[x, 1]]) });
       out.push(ev({
+        mech: { site: { kind: 'n', a: x }, arrows: [FL(Mid(c, x), A(x))], highlightBonds: [[c, x]] },
         rule: 'inductive', ruleName: `Escisión inductiva (i) del enlace C–${X.el} (${kind})`, ion, neutral: neu, neutralLabel: rc.label,
         cleaved: [b.idx], oe: false, score: f * cc.score * rc.score,
         steps: [
@@ -261,6 +278,8 @@ function haloniumCyclic(g) {
         const nm = { Br: 'bromonio', Cl: 'cloronio', I: 'yodonio', S: 'sulfonio' }[X.el];
         const prod = ring === 5 ? (X.el === 'S' ? 'tiolanio (tetrahidrotiofenio)' : 'tetrahidrohalogenonio') : (X.el === 'S' ? 'tiiranio' : 'halogenonio de 3 miembros (tipo etilenhalonio)');
         out.push(ev({
+          mech: { site: { kind: 'n', a: X.idx }, closeRing: ring === 5 ? [X.idx, cr] : null, bridgeH: false,
+            arrows: [FH(A(X.idx), Mid(X.idx, cr)), FH(Mid(cr, cx), Mid(X.idx, cr)), FH(Mid(cr, cx), A(cx))], highlightBonds: [[cr, cx]] },
           rule: ring === 5 ? 'halonium' : 'onium3', ruleName: `Ciclación con desplazamiento: ion ${nm} cíclico de ${ring} miembros`,
           ion, neutral: neu, neutralLabel: rc.label, cleaved: [bi], oe: false,
           score: CYCLO_ONIUM[ring][X.el] * rc.score,
@@ -312,6 +331,10 @@ function benzylicAllylic(g) {
       const neu = new Species(g, neuAt, { rad: new Map([[nr.atom, 1]]) });
       const isTrop = isBenz && ion.formulaString === 'C7H7';
       out.push(ev({
+        mech: (() => {
+          const piB = isBenz ? (g.atoms[anchor].nbrs.find(m => g.atoms[m.atom].aromatic) || {}).atom : allylNb.dbl;
+          return { site: { kind: 'pi', a: anchor, b: piB }, arrows: [FH(Mid(anchor, piB), Mid(anchor, cb.idx)), FH(Mid(cb.idx, nr.atom), Mid(anchor, cb.idx)), FH(Mid(cb.idx, nr.atom), A(nr.atom))], highlightBonds: [[cb.idx, nr.atom]] };
+        })(),
         rule: isBenz ? 'benzylic' : isProp ? 'propargylic' : 'allylic',
         ruleName: isBenz ? 'Escisión bencílica (β al anillo) → ion bencilo/tropilio' : isProp ? 'Escisión propargílica (→ C₃H₃⁺ y homólogos)' : 'Escisión alílica',
         ion, neutral: neu, neutralLabel: rc.label, cleaved: [nr.bond], oe: false,
@@ -337,6 +360,10 @@ function benzylicAllylic(g) {
     if (isBenz && cb.h > 0) {
       const ion = new Species(g, allAtoms(g), { dH: new Map([[cb.idx, -1]]), chg: new Map([[cb.idx, 1]]), tags: { benzyl: true } });
       out.push(ev({
+        mech: (() => {
+          const piB = (g.atoms[arNb.atom].nbrs.find(m => g.atoms[m.atom].aromatic) || {}).atom;
+          return { site: { kind: 'pi', a: arNb.atom, b: piB }, arrows: [FH(Mid(arNb.atom, piB), Mid(arNb.atom, cb.idx)), FH(['mHi', cb.idx, arNb.atom], Mid(arNb.atom, cb.idx)), FH(['mHi', cb.idx, arNb.atom], ['H', cb.idx, null])] };
+        })(),
         rule: 'benzylicH', ruleName: 'Pérdida de H• bencílico → ion tropilio', ion, neutral: null, neutralFormula: { H: 1 }, neutralLabel: 'H•',
         cleaved: [], oe: false, score: (cb.nbrs.length === 1 ? 2.2 : 0.1) * (ewgOnRing(g, arNb.atom) ? 0.12 : 1),
         steps: [
@@ -381,6 +408,7 @@ function sigmaCC(g) {
       const ion = new Species(g, ionAt, { chg: new Map([[c, 1]]), tags: sat ? { alkyl: f.C } : {} });
       const neu = new Species(g, neuAt, { rad: new Map([[r, 1]]) });
       out.push(ev({
+        mech: { site: { kind: 'sigma', a: c, b: r }, arrows: [FH(Mid(c, r), A(r))], highlightBonds: [[c, r]] },
         rule: 'sigma', ruleName: 'Escisión σ de enlace C–C', ion, neutral: neu, neutralLabel: rc.label, cleaved: [b.idx], oe: false,
         score: base * cc.score * rc.score * w,
         steps: [
@@ -498,6 +526,7 @@ function mclafferty(g) {
             const ionP = new Species(g, ionAt, { dH: new Map([[x, 1], [al, 1]]), bo: new Map([[acc.bond, 1]]), chg: new Map([[y, 1]]), tags: { mclPlus1: true } });
             const neuP = new Species(g, neuAt, { dH: new Map([[ga, -1], [be, -1]]), bo: new Map([[bg0(g, be, ga), 2]]), rad: new Map([[be, 1]]) });
             out.push(ev({
+              mech: { site: { kind: 'n', a: x }, closeRing: [x, ga], arrows: hTransferArrows(A(x), x, ga, be, null, null), highlightBonds: [[al, be]] },
               rule: 'mclPlus1', ruleName: 'Reordenamiento de doble H («McLafferty + 1») en ésteres', ion: ionP, neutral: neuP,
               neutralLabel: `radical alquenilo ${neuP.formulaString}•`, cleaved: [nb.bond], oe: false,
               score: acylConj ? 0.45 : 0.4,
@@ -512,8 +541,16 @@ function mclafferty(g) {
             }));
           }
           if (gaHet) ion.tags.benzylHtransfer = true;
+          const nSite = ['carbonyl', 'imina', 'nitrilo'].includes(acc.kind);
+          const mclMech = {
+            site: nSite ? { kind: 'n', a: x } : { kind: 'pi', a: x, b: y },
+            closeRing: [x, ga],
+            arrows: hTransferArrows(nSite ? A(x) : Mid(x, y), x, ga, be, [al, be], [y, al]),
+            highlightBonds: [[al, be]]
+          };
           const ionTxt = acc.kind === 'carbonyl' ? 'radical-catión enólico' : acc.kind === 'aromático' ? 'radical-catión metilenciclohexadieno (isotolueno)' : acc.kind === 'alquino' ? 'radical-catión aleno' : 'radical-catión par-másico';
           out.push(ev({
+            mech: mclMech,
             rule: 'mclafferty', ruleName: gaHet ? `Escisión bencílica/alílica con transferencia de H desde ${g.atoms[ga].el} (McLafferty ${famTxt})` : `Reordenamiento de McLafferty (${famTxt}${alkoxySide ? ', lado alcoxilo' : ''})`,
             ion, neutral: neu, neutralLabel: gaHet ? `${g.atoms[ga].el === 'O' ? 'aldehído/cetona' : 'imina'} ${neu.formulaString}` : `alqueno ${neu.formulaString}`,
             cleaved: [nb.bond], oe: true, score,
@@ -531,6 +568,7 @@ function mclafferty(g) {
           const ion2 = neu.clone({ oddElectron: true, depictAsNeutral: true, tags: { mclaffertyAlkene: true, alkeneIon: !gaHet } });
           const neu2 = ion.clone();
           out.push(ev({
+            mech: mclMech,
             rule: 'mclaffertyAlk', ruleName: 'McLafferty con retención de carga en el alqueno', ion: ion2, neutral: neu2,
             neutralLabel: `${acc.kind === 'carbonyl' ? 'enol' : 'neutro'} ${neu2.formulaString}`, cleaved: [nb.bond], oe: true,
             score: shareIon != null ? total * (1 - shareIon) : alkoxySide ? (neuAt.size >= 3 ? 0.45 * Math.min(neuAt.size, 6) / 2 : 0.01) : score * 0.08 * Math.min(neuAt.size, 6) / 2,
@@ -583,9 +621,10 @@ function retroDielsAlder(g) {
         `Reacción retro-Diels–Alder (cicloreversión [4+2] formal, por pasos en el ion radical): se rompen los enlaces alílicos ${B(g, a3, a4)} y ${B(g, a5, a6)}.`,
         `Productos: ${ionName} (ion radical, OE⁺•) + ${neuName} neutro. La carga se reparte según la regla de Stevenson (normalmente en el fragmento dieno).`
       ];
-      out.push(ev({ rule: 'rda', ruleName: 'Retro-Diels–Alder (carga en el dieno)', ion: dieneSp, neutral: eneSp, neutralLabel: `dienófilo ${eneSp.formulaString}`,
+const rdaMech = { site: { kind: 'pi', a: a1, b: a2 }, arrows: [FH(Mid(a1, a2), Mid(a2, a3)), FH(Mid(a3, a4), Mid(a2, a3)), FH(Mid(a3, a4), Mid(a4, a5)), FH(Mid(a5, a6), Mid(a4, a5)), FH(Mid(a5, a6), Mid(a6, a1)), FH(Mid(a1, a2), Mid(a6, a1))], highlightBonds: [[a3, a4], [a5, a6]] };
+      out.push(ev({ mech: rdaMech, rule: 'rda', ruleName: 'Retro-Diels–Alder (carga en el dieno)', ion: dieneSp, neutral: eneSp, neutralLabel: `dienófilo ${eneSp.formulaString}`,
         cleaved: [b34, b56], oe: true, score: 1.6 * dieneShare, steps: steps(`dieno ${dieneSp.formulaString}`, `dienófilo ${eneSp.formulaString}`), refs: ['RDA', 'MT', 'GROSS'] }));
-      out.push(ev({ rule: 'rda', ruleName: 'Retro-Diels–Alder (carga en el dienófilo)', ion: eneSp.clone(), neutral: dieneSp.clone(), neutralLabel: `dieno ${dieneSp.formulaString}`,
+      out.push(ev({ mech: rdaMech, rule: 'rda', ruleName: 'Retro-Diels–Alder (carga en el dienófilo)', ion: eneSp.clone(), neutral: dieneSp.clone(), neutralLabel: `dieno ${dieneSp.formulaString}`,
         cleaved: [b34, b56], oe: true, score: 1.6 * (1 - dieneShare), steps: steps(`dienófilo ${eneSp.formulaString}`, `dieno ${dieneSp.formulaString}`), refs: ['RDA', 'MT'] }));
     }
   });
@@ -611,7 +650,8 @@ function neutralLosses(g) {
         if (cb) {
           const nC = g.atoms.filter(a => a.el === 'C').length;
           const ion = new Species(g, minus([X.idx]), { dH: new Map([[cb.atom, -1]]), bo: new Map([[g.bondBetween(ca, cb.atom), 2]]), oddElectron: true, depictAsNeutral: true, tags: { cycloalkene: g.inRing(ca), alkeneIon: !g.inRing(ca) } });
-          mk({ rule: 'lossH2O', ruleName: X.el === 'O' ? 'Eliminación de H₂O (alcohol)' : 'Eliminación de H₂S (tiol)', ion, neutral: null,
+          mk({ mech: { site: { kind: 'n', a: X.idx }, closeRing: [X.idx, cb.atom], arrows: [...hTransferArrows(A(X.idx), X.idx, cb.atom, ca, null, null), FH(Mid(ca, X.idx), Mid(ca, cb.atom))], highlightBonds: [[ca, X.idx]] },
+            rule: 'lossH2O', ruleName: X.el === 'O' ? 'Eliminación de H₂O (alcohol)' : 'Eliminación de H₂S (tiol)', ion, neutral: null,
             neutralFormula: X.el === 'O' ? { H: 2, O: 1 } : { H: 2, S: 1 }, neutralLabel: X.el === 'O' ? 'H₂O' : 'H₂S',
             score: (X.el === 'O' ? 0.7 : 0.4) * (nC >= 4 ? 1.0 : 0.5) * (g.inRing(ca) ? 2.5 : [1, 1, 0.3, 0.12][Math.min(3, g.atoms[ca].nbrs.filter(n => g.isC(n.atom)).length)]),
             steps: [
@@ -630,7 +670,8 @@ function neutralLosses(g) {
         const cb = g.atoms[ca].nbrs.find(n => n.atom !== X.idx && g.isC(n.atom) && g.atoms[n.atom].h > 0 && g.isSp3(n.atom));
         if (cb) {
           const ion = new Species(g, minus([X.idx]), { dH: new Map([[cb.atom, -1]]), bo: new Map([[g.bondBetween(ca, cb.atom), 2]]), oddElectron: true, depictAsNeutral: true, tags: { alkeneIon: true } });
-          mk({ rule: 'lossHX', ruleName: `Eliminación de H${X.el}`, ion, neutral: null, neutralFormula: { H: 1, [X.el]: 1 }, neutralLabel: `H${X.el}`,
+          mk({ mech: { site: { kind: 'n', a: X.idx }, closeRing: [X.idx, cb.atom], arrows: [...hTransferArrows(A(X.idx), X.idx, cb.atom, ca, null, null), FH(Mid(ca, X.idx), Mid(ca, cb.atom))], highlightBonds: [[ca, X.idx]] },
+            rule: 'lossHX', ruleName: `Eliminación de H${X.el}`, ion, neutral: null, neutralFormula: { H: 1, [X.el]: 1 }, neutralLabel: `H${X.el}`,
             score: { Cl: 0.45, Br: 0.12, F: 0.7 }[X.el],
             steps: [`Ionización en el halógeno ${L(g, X.idx)}.`, `Abstracción de un H vecinal y eliminación de H${X.el} neutro, dando el radical-catión del alqueno ([M−H${X.el}]⁺•).`],
             refs: ['HALIDES', 'MT'] });
@@ -679,7 +720,8 @@ function neutralLosses(g) {
         const acyl = g.sideOf(n.bond, c, M);
         const ion = new Species(g, minus([...acyl]), { dH: new Map([[X.idx, 1]]), oddElectron: true, depictAsNeutral: true });
         const neu = new Species(g, acyl, { dH: new Map([[me.atom, -1]]), bo: new Map([[g.bondBetween(c, me.atom), 2]]) });
-        mk({ rule: 'ketene', ruleName: 'Eliminación de ceteno (CH₂=C=O)', ion, neutral: neu, neutralLabel: `ceteno ${neu.formulaString}`, score: 3.5,
+        mk({ mech: { site: { kind: 'n', a: X.idx }, closeRing: [X.idx, me.atom], arrows: [...hTransferArrows(A(X.idx), X.idx, me.atom, c, null, null), FH(Mid(X.idx, c), Mid(c, me.atom))], highlightBonds: [[X.idx, c]] },
+          rule: 'ketene', ruleName: 'Eliminación de ceteno (CH₂=C=O)', ion, neutral: neu, neutralLabel: `ceteno ${neu.formulaString}`, score: 3.5,
           steps: [`Ionización en ${L(g, X.idx)} o en el anillo aromático.`, `Transferencia de H desde ${L(g, me.atom)} hacia ${L(g, X.idx)} a través de un estado de transición de 4 miembros (o vía el anillo, 6 miembros).`,
             `Ruptura de ${B(g, X.idx, c)} y expulsión de ceteno neutro; se forma el radical-catión de la anilina/fenol ([M−42]⁺•).`],
           refs: ['MT', 'SILV'] });
@@ -695,7 +737,8 @@ function neutralLosses(g) {
           steps: ['Ionización en el anillo o en el O del éter.', 'Transferencia de H del metilo al anillo (estado de transición de 4 miembros) y eliminación de CH₂O ([M−30]⁺•).'],
           refs: ['MT'] });
         const ion = new Species(g, minus([me.atom]), { formula: clean({ ...f, C: f.C - 1, H: f.H - 3 }), tags: { aryloxy: true } });
-        mk({ rule: 'arylOMe', ruleName: 'Pérdida de •CH₃ en aril metil éteres', ion, neutral: null, oe: false, neutralFormula: { C: 1, H: 3 }, neutralLabel: '•CH₃', score: 0.8,
+        mk({ mech: { site: { kind: 'n', a: X.idx }, arrows: [FH(A(X.idx), Mid(X.idx, ar.atom)), FH(Mid(X.idx, me.atom), Mid(X.idx, ar.atom)), FH(Mid(X.idx, me.atom), A(me.atom))], highlightBonds: [[X.idx, me.atom]] },
+          rule: 'arylOMe', ruleName: 'Pérdida de •CH₃ en aril metil éteres', ion, neutral: null, oe: false, neutralFormula: { C: 1, H: 3 }, neutralLabel: '•CH₃', score: 0.8,
           steps: ['Ionización en el O del éter (conjugado con el anillo).', 'Ruptura homolítica O–CH₃ con formación del ion fenoxilo/oxociclohexadienilo ArO⁺ ([M−15]⁺).'],
           refs: ['MT'] });
       }
@@ -748,4 +791,4 @@ function carbocycleOpening(g) {
 
 const PRIMARY_RULES = [carbocycleOpening, alphaHetero, carbonyl, inductive, haloniumCyclic, benzylicAllylic, sigmaCC, mclafferty, retroDielsAlder, neutralLosses];
 
-module.exports = { PRIMARY_RULES, isSaturatedAlkyl, clean, L, B, ev, split, allAtoms, complement, classifyCarbonyl, ewgOnRing, benzylicAllylic, mclafferty };
+module.exports = { FH, FL, A, Mid, hTransferArrows, PRIMARY_RULES, isSaturatedAlkyl, clean, L, B, ev, split, allAtoms, complement, classifyCarbonyl, ewgOnRing, benzylicAllylic, mclafferty };

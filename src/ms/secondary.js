@@ -6,7 +6,7 @@
  */
 const { Species } = require('./species');
 const { cationClass } = require('./stability');
-const { clean, L, B } = require('./rules');
+const { clean, L, B, FH, FL, A, Mid } = require('./rules');
 const { formulaToString } = require('../chem/elements');
 const { orthoEffect } = require('./rules_ext');
 
@@ -37,7 +37,7 @@ function secondary(e) {
       const dist = !!ion.tags.distonic;
       const ni = new Species(g, atoms, { dH, bo, chg, rad: new Map(ion.rad), tags: dist ? { ...tags, noDepict: true, alkeneOE: true } : tags, oddElectron: dist });
       const k = dist ? (atoms.size >= 3 ? 1.4 : 0.8) : cc.cls === 'aryl' ? 0.55 : Math.min(0.6, 0.6 * cc.score);
-      out.push(child(e, { rule: 'acyliumCO', ruleName: dist ? 'Descarbonilación del ion acilio distónico (−CO)' : 'Descarbonilación del ion acilio (−CO)', ion: ni, oe: dist, neutral: null, neutralFormula: { C: 1, O: 1 }, neutralLabel: 'CO', k,
+      out.push(child(e, { mech: { site: { kind: 'n', a: o, label: dist ? '+' : '+' }, arrows: [FL(Mid(c, r.atom), A(c))], highlightBonds: [[c, r.atom]] }, rule: 'acyliumCO', ruleName: dist ? 'Descarbonilación del ion acilio distónico (−CO)' : 'Descarbonilación del ion acilio (−CO)', ion: ni, oe: dist, neutral: null, neutralFormula: { C: 1, O: 1 }, neutralLabel: 'CO', k,
         steps: [`El ion acilio ${fs}⁺ expulsa monóxido de carbono (molécula neutra estable, regla del electrón par) por ruptura heterolítica de ${B(g, c, r.atom)} (⇒).`,
           `Se forma ${cc.label} ${ni.formulaString}⁺ (Δm = 28). ${cc.cls === 'aryl' ? 'Ejemplo clásico: C₆H₅CO⁺ (m/z 105) → C₆H₅⁺ (m/z 77).' : ''}`],
         refs: ['MT', 'GROSS'] }));
@@ -58,7 +58,7 @@ function secondary(e) {
       const ni = new Species(g, atoms, { dH, bo: new Map(ion.bo), chg: new Map(ion.chg), tags: { onium: { het, c } } });
       const neu = new Species(g, side, { dH: new Map([[beta.atom, -1]]), bo: new Map([[g.bondBetween(n.atom, beta.atom), 2]]) });
       const k = { N: 0.3, O: 0.8, S: 0.35 }[g.atoms[het].el] || 0.3;
-      out.push(child(e, { rule: 'onium', ruleName: 'Reacción del onio (pérdida de alqueno desde el ion iminio/oxonio)', ion: ni, neutral: neu, neutralLabel: `alqueno ${neu.formulaString}`, k,
+      out.push(child(e, { mech: { site: { kind: 'n', a: het, label: '+' }, arrows: [FL(Mid(het, n.atom), ['mH', beta.atom, het, het]), FL(['mHi', beta.atom, het], Mid(n.atom, beta.atom))], highlightBonds: [[het, n.atom]] }, rule: 'onium', ruleName: 'Reacción del onio (pérdida de alqueno desde el ion iminio/oxonio)', ion: ni, neutral: neu, neutralLabel: `alqueno ${neu.formulaString}`, k,
         steps: [`El ion ${fs}⁺ (EE) con un sustituyente alquilo sobre ${L(g, het)} transfiere un H β (${L(g, beta.atom)}) al heteroátomo (estado de transición de 4 miembros o vía complejo ion–neutro).`,
           `Ruptura heterolítica de ${B(g, het, n.atom)} y eliminación del alqueno neutro ${neu.formulaString}; se forma ${ni.formulaString}⁺.`,
           'Proceso típico de aminas y éteres (p. ej., trietilamina m/z 86 → 58; dietil éter m/z 59 → 31).'],
@@ -81,7 +81,7 @@ function secondary(e) {
       const ni = new Species(g, atoms, { dH, bo: new Map(ion.bo), chg: new Map(ion.chg), tags: { onium: { het, c } } });
       const neu = new Species(g, side, { dH: new Map([[beta.atom, -1]]), bo: new Map([[g.bondBetween(n.atom, beta.atom), 2]]) });
       const k = { O: 1.0, N: 0.12, S: 0.2 }[hetEl] || 0.1;
-      out.push(child(e, { rule: 'oniumC', ruleName: 'Reacción del onio desde el carbono (pérdida de alqueno en R–CH=XH⁺)', ion: ni, neutral: neu, neutralLabel: `alqueno ${neu.formulaString}`, k,
+      out.push(child(e, { mech: { site: { kind: 'n', a: het, label: '+' }, arrows: [FL(Mid(c, n.atom), ['mH', beta.atom, c, c]), FL(['mHi', beta.atom, c], Mid(n.atom, beta.atom))], highlightBonds: [[c, n.atom]] }, rule: 'oniumC', ruleName: 'Reacción del onio desde el carbono (pérdida de alqueno en R–CH=XH⁺)', ion: ni, neutral: neu, neutralLabel: `alqueno ${neu.formulaString}`, k,
         steps: [`El ion ${fs}⁺ (EE, ${hetEl === 'O' ? 'oxonio' : hetEl === 'N' ? 'iminio' : 'tionio'}) transfiere un H β de la cadena (${L(g, beta.atom)}) al carbono cargado ${L(g, c)} vía un complejo ion–neutro [R⁺ / CH₂=XH].`,
           `Se rompe ${B(g, c, n.atom)} y se elimina el alqueno ${neu.formulaString}; queda ${ni.formulaString}⁺ (p. ej., 2-butanol: m/z 59 → 31, CH₂=OH⁺).`],
         refs: ['ALCOH', 'MT', 'EVEN'] }));

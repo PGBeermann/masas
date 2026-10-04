@@ -21,7 +21,7 @@
 const { Species } = require('./species');
 const { MolGraph } = require('../chem/molgraph');
 const R = require('./rules');
-const { L, B, ev, split, allAtoms, complement, benzylicAllylic, mclafferty } = R;
+const { L, B, ev, split, allAtoms, complement, benzylicAllylic, mclafferty, FH, A, Mid, hTransferArrows } = R;
 const { radicalClass } = require('./stability');
 
 /* ------------------------------------------------------------------ */
@@ -91,6 +91,8 @@ function migration(g) {
     const hopTxt = [...path, `${L(g, c.p)}${sym}${L(g, c.q)} → ${L(g, c.q)}${sym}${L(g, c.r)}`].join('; ');
     for (const e of eventsOnNewBond(g2, c.q, c.r)) {
       out.push(Object.assign(e, {
+        precursor: new Species(g2, allAtoms(g2), { oddElectron: true, depictAsNeutral: true }),
+        precursorNote: 'isómero tras la migración del enlace múltiple',
         rule: 'migr_' + e.rule,
         ruleName: `Migración del ${mult} enlace + ${e.ruleName.charAt(0).toLowerCase() + e.ruleName.slice(1)}`,
         score: e.score * w,
@@ -122,6 +124,7 @@ function propargylicH(g) {
         if (n.bond === b.idx || !g.isC(c) || !g.isSp3(c) || g.atoms[c].h === 0) continue;
         const ion = new Species(g, allAtoms(g), { dH: new Map([[c, -1]]), chg: new Map([[c, 1]]), tags: { propargyl: true } });
         out.push(ev({
+          mech: { site: { kind: 'pi', a: b.a, b: b.b }, arrows: [FH(Mid(b.a, b.b), Mid(s, c)), FH(['mHi', c, s], Mid(s, c)), FH(['mHi', c, s], ['H', c, null])] },
           rule: 'propargylH', ruleName: 'Pérdida de H• propargílico ([M−1]⁺, alquinos)', ion, neutral: null, neutralFormula: { H: 1 }, neutralLabel: 'H•',
           cleaved: [], oe: false, score: terminal ? 0.35 : 0.12,
           steps: [
@@ -162,6 +165,7 @@ function alkaneRH(g) {
       const wDeg = deg >= 4 ? 2.0 : deg === 3 ? 1.8 : 0.12;
       const wN = neuAt.size === 1 ? 0.15 : neuAt.size <= 3 ? 0.5 : 1;
       out.push(ev({
+        mech: { site: { kind: 'sigma', a: ca, b: cg }, closeRing: [cg, cb.atom], arrows: [...hTransferArrows(Mid(ca, cg), cg, cb.atom, ca, null, null), FH(Mid(ca, cg), Mid(ca, cb.atom))], highlightBonds: [[ca, cg]] },
         rule: 'alkaneRH', ruleName: 'Eliminación de un alcano R–H (alcanos ramificados → ion alqueno)', ion, neutral: neu,
         neutralLabel: `alcano ${neu.formulaString}`, cleaved: [b.idx], oe: true,
         score: 0.5 * wDeg * (ALKENE_SIZE_W[nIon] || 0.4) * wN,
@@ -210,6 +214,7 @@ function eliminationHXR(g) {
       const lab = { ester: 'ácido carboxílico', ether: 'alcohol', sulfide: 'tiol', amine1: 'NH₃', amine: 'amina' }[type];
       const nm = { ester: 'Eliminación de RCOOH (ésteres de alquilo)', ether: 'Eliminación de ROH (éteres)', sulfide: 'Eliminación de RSH (sulfuros)', amine1: 'Eliminación de NH₃ (aminas primarias)', amine: 'Eliminación de una amina RNH₂/R₂NH' }[type];
       out.push(ev({
+        mech: { site: { kind: 'n', a: X.idx }, closeRing: [X.idx, cb.atom], arrows: [...hTransferArrows(A(X.idx), X.idx, cb.atom, ca, null, null), FH(Mid(ca, X.idx), Mid(ca, cb.atom))], highlightBonds: [[ca, X.idx]] },
         rule: 'elim_' + type, ruleName: nm, ion, neutral: neu, neutralLabel: `${lab} ${neu.formulaString}`, cleaved: [nx.bond], oe: true,
         score: base * (nC >= 3 ? 1 : 0.15),
         steps: [
@@ -253,6 +258,8 @@ function derivedAlkeneEvents(RDKit, e) {
   const S = evs.reduce((s, x) => s + x.score, 0);
   return evs.map(x => Object.assign(x, {
     k: 0.75 * x.score / (S + 1.2),
+    precursor: x.precursor || new Species(g2, allAtoms(g2), { oddElectron: true, depictAsNeutral: true }),
+    precursorNote: x.precursorNote || `ion alqueno m/z ${sp.nominal}`,
     generation: e.generation + 1, parent: e, derived: true, cleaved: [],
     ruleName: 'Fragmentación del ion alqueno: ' + x.ruleName.charAt(0).toLowerCase() + x.ruleName.slice(1),
     steps: [`El radical-catión alqueno ${sp.formulaString}⁺• (m/z ${sp.nominal}) se comporta como un alqueno ionizado (índices de átomos referidos a la molécula original).`, ...x.steps],

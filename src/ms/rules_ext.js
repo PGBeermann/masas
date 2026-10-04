@@ -12,7 +12,7 @@
  */
 const { Species } = require('./species');
 const { radicalClass } = require('./stability');
-const { ev, L, B, clean } = require('./rules');
+const { ev, L, B, clean, FH, FL, A, Mid } = require('./rules');
 
 const allOf = (g) => new Set(g.atoms.map(a => a.idx));
 
@@ -64,6 +64,7 @@ function ringAlpha(g) {
           const charge = { bo: [[site.hetBond, site.order]], chg: [[site.het, 1]] };
           const typeTxt = { a: 'cetona cíclica', b: site.het != null && g.atoms[site.het].el === 'N' ? 'amina en anillo carbocíclico' : 'alcohol/éter en anillo carbocíclico', c: g.atoms[site.het].el === 'N' ? 'amina cíclica' : g.atoms[site.het].el === 'O' ? 'éter cíclico' : 'sulfuro cíclico' }[site.type];
           const ionName = site.type === 'a' ? 'ion acilio' : g.atoms[site.het].el === 'N' ? 'ion iminio' : g.atoms[site.het].el === 'O' ? 'ion oxonio' : 'ion tionio';
+          const alphaArr = [FH(A(site.het), Mid(site.het, cc)), FH(Mid(cc, cb), Mid(site.het, cc)), FH(Mid(cc, cb), A(cb))];
           const step1 = [
             site.type === 'a' ? `Ionización en el par libre del oxígeno carbonílico ${L(g, site.het)}.` : `Ionización en el par libre de ${L(g, site.het)}.`,
             `α-Escisión del enlace del anillo ${B(g, cc, cb)} (↷): el anillo se abre sin cambio de masa y se forma un ion distónico — la carga queda como ${ionName} en ${L(g, cc)} y el radical en ${L(g, cb)}.`
@@ -84,6 +85,7 @@ function ringAlpha(g) {
               const ts = n - d + 1; // miembros del estado de transición (átomos de la cadena donador…radical + H)
               const base = { a: 2.4, b: 1.9, c: 0.3 }[site.type] * (ts >= 6 ? 1 : 0.8);
               push('B' + ion.key(), {
+                mech: { site: { kind: 'n', a: site.het }, arrows: [...alphaArr, FH(['mHi', donor, cb], ['mH', donor, cb, cb]), FH(Mid(P[d + 1], P[d + 2]), Mid(P[d], P[d + 1])), FH(Mid(P[d + 1], P[d + 2]), A(P[d + 2]))], highlightBonds: [[cc, cb], [P[d + 1], P[d + 2]]] },
                 rule: 'ringAlphaB', ruleName: `α-Escisión en anillo + transferencia de H + β-escisión (${typeTxt})`, ion, neutral: neu, neutralLabel: rc.label,
                 cleaved: [bCb, bBeta], oe: false, score: base * rc.score,
                 steps: [...step1,
@@ -109,6 +111,7 @@ function ringAlpha(g) {
               const neu = new Species(g, neuAt, { bo: new Map([[bDb, 2]]) });
               const base = { a: 1.3, b: 0.25, c: n === 5 && g.atoms[site.het].el === 'N' ? 1.3 : 0.22 }[site.type];
               push('A' + ion.key(), {
+                mech: { site: { kind: 'n', a: site.het }, arrows: [...alphaArr, FH(Mid(P[n - 2], P[n - 3]), Mid(cb, P[n - 2])), FH(Mid(P[n - 2], P[n - 3]), A(P[n - 3]))], highlightBonds: [[cc, cb], [P[n - 2], P[n - 3]]] },
                 rule: 'ringAlphaA', ruleName: `α-Escisión en anillo + β-escisión con pérdida de alqueno (${typeTxt})`, ion, neutral: neu, neutralLabel: `alqueno ${neu.formulaString}`,
                 cleaved: [bCb, bA], oe: true, score: base,
                 steps: [...step1,
@@ -129,6 +132,7 @@ function ringAlpha(g) {
               const neu = new Species(g, neuAt, { bo: new Map([[site.hetBond, 2]]) });
               const base = { O: 1.3, N: 0.12, S: 0.6 }[g.atoms[X].el];
               push('C' + ion.key(), {
+                mech: { site: { kind: 'n', a: site.het }, arrows: [...alphaArr, FL(Mid(X, P[2]), A(P[2]))], highlightBonds: [[cc, cb], [X, P[2]]] },
                 rule: 'ringAlphaC', ruleName: `Apertura del anillo con expulsión de ${neu.formulaString} (${typeTxt})`, ion, neutral: neu, neutralLabel: `neutro ${neu.formulaString}`,
                 cleaved: [bCb, bX], oe: true, score: base,
                 steps: [...step1,

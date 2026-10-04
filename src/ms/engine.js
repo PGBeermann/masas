@@ -21,6 +21,7 @@ const { EXT_RULES } = require('./rules_ext');
 const { BEAU_RULES, derivedAlkeneEvents } = require('./rules_beauchamp');
 const { secondary } = require('./secondary');
 const REFS = require('./references');
+const { mechanismSvg, bracketIon } = require('./arrows');
 
 const MAX_HEAVY = 60;
 
@@ -136,7 +137,20 @@ function predict(RDKit, smilesIn, opts = {}) {
     }
     const mInfo = molecularIonFactor(g);
     const Mfs = M.formulaString;
+    // sitio de ionización de menor EI: par libre n (N > S > O ≈ I > Br > Cl) > π (C=C, C≡C, arilo) > σ C–C (McLafferty & Tureček 1993, §4.1)
+    const ionSite = (() => {
+      for (const el of ['N', 'S', 'I', 'O', 'Br', 'Cl']) {
+        const a = g.atoms.find(x => x.el === el && !(el === 'N' && x.aromatic && x.nbrs.length === 3) && !(el === 'N' && x.nbrs.filter(n => g.atoms[n.atom].el === 'O').length >= 2));
+        if (a) return { kind: 'n', a: a.idx };
+      }
+      const pi = g.bonds.find(b => !b.aromatic && b.order >= 2 && g.isC(b.a) && g.isC(b.b)) || g.bonds.find(b => b.aromatic);
+      if (pi) return { kind: 'pi', a: pi.a, b: pi.b };
+      const cc = g.bonds.filter(b => b.order === 1 && g.isC(b.a) && g.isC(b.b));
+      const c = cc[Math.floor(cc.length / 2)];
+      return c ? { kind: 'sigma', a: c.a, b: c.b } : null;
+    })();
     const mEvent = {
+      mech: ionSite ? { site: ionSite, arrows: [] } : null, precursorNote: 'M⁺• (sitio de ionización)',
       rule: 'M', ruleName: 'Ion molecular M⁺•', ion: M, neutral: null, oe: true, generation: 0, cleaved: [],
       steps: [
         'Impacto electrónico (70 eV): M + e⁻ → M⁺• + 2e⁻. Se remueve el electrón de menor energía de ionización: n (N > S > O ≈ I > Br > Cl) > π (aromático, C=C) > σ.',
@@ -194,6 +208,17 @@ function predict(RDKit, smilesIn, opts = {}) {
         (e.refs || []).forEach(r => usedRefs.add(r));
         let ionDep = null; let neuDep = null;
         if (!e.ion.tags.noDepict) ionDep = e.ion.depict(RDKit);
+        if (ionDep && ionDep.svg && e.oe && (e.ion.depictAsNeutral || e.ion.oddElectron)) ionDep.svg = bracketIon(ionDep.svg, '+•');
+        // precursor con flechas de movimiento electrónico, carga (⊕) y electrón desapareado (•)
+        let mechSvg = null; let precursorLabel = null;
+        if (e.mech) {
+          const pre = e.precursor || (e.parent ? e.parent.ion : M);
+          try { mechSvg = mechanismSvg(RDKit, pre, e.mech); } catch (_) { mechSvg = null; }
+          if (mechSvg) {
+            let pf = null; try { pf = pre.formulaString; } catch (_) { /* */ }
+            precursorLabel = e.precursorNote || (pre === M ? 'M⁺•' : pf ? `${pf} (m/z ${pre.nominal})` : null);
+          }
+        }
         if (e.neutral && !e.neutral.tags.noDepict) neuDep = e.neutral.depict(RDKit, { w: 160, h: 120 });
         let neutralF = null;
         try { neutralF = e.neutral ? e.neutral.formulaString : e.neutralFormula ? formulaToString(e.neutralFormula) : null; } catch (_) { /* */ }
@@ -202,6 +227,7 @@ function predict(RDKit, smilesIn, opts = {}) {
           ionFormula: e.ion.formulaString, ionMz: e.ion.nominal, oddElectron: !!e.oe,
           neutralFormula: neutralF, neutralLabel: e.neutralLabel || null,
           ionSmiles: ionDep ? ionDep.smiles : null, ionSvg: ionDep ? ionDep.svg : null,
+          mechSvg, precursorLabel,
           neutralSmiles: neuDep ? neuDep.smiles : null, neutralSvg: neuDep ? neuDep.svg : null,
           mechanism: e.steps, refs: e.refs
         };
@@ -229,7 +255,7 @@ function predict(RDKit, smilesIn, opts = {}) {
       spectrum, explanations,
       parentSvg: parentSvgFor([]),
       references: [...usedRefs].map(k => ({ key: k, text: REFS[k] })).filter(r => r.text),
-      meta: { engine: 'EI-MS rule-based predictor v1.2', rdkit: RDKit.version(), events: all.length, ms: Date.now() - t0,
+      meta: { engine: 'EI-MS rule-based predictor v1.3', rdkit: RDKit.version(), events: all.length, ms: Date.now() - t0,
         disclaimer: 'Intensidades semicuantitativas derivadas de reglas mecanísticas (EI 70 eV). Validar con espectros de referencia (NIST/Wiley).' }
     };
     return result;
