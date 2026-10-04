@@ -80,7 +80,12 @@ router.post('/api/predict', rateLimit, (req, res) => {
 });
 
 router.use('/jsme', express.static(path.join(__dirname, 'node_modules', 'jsme-editor'), { maxAge: '30d' }));
-router.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
+// index.html sin caché (siempre se revalida); app.js y style.css se versionan con ?v= en index.html,
+// de modo que cada actualización del programa llega al navegador sin necesidad de forzar la recarga.
+router.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1h',
+  setHeaders: (res, file) => { if (file.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); }
+}));
 
 app.use(BASE || '/', router);
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
