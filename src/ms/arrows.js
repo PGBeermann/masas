@@ -200,7 +200,16 @@ function overlay(svg, P, ctx, mech) {
     if (a.from[0] === 'a') { s = { x: s.x + dx / L * 6, y: s.y + dy / L * 6 }; }
     const mx = (s.x + e.x) / 2, my = (s.y + e.y) / 2;
     let nx = -dy / L, ny = dx / L;
-    const h = Math.max(13, Math.min(34, L * 0.5));
+    //const h = Math.max(13, Math.min(34, L * 0.5));
+
+ // 1 e⁻ (homolítica): arco más pronunciado; 2 e⁻: curvatura moderada
+    const fish = a.t !== 'full';
+    const h = fish
+      ? Math.max(22, Math.min(44, L * 0.9))   // separación máx. ≈ 11–22 px
+      : Math.max(13, Math.min(34, L * 0.5));
+
+
+    
     // curvar hacia el lado más despejado (lejos de átomos, enlaces y flechas ya dibujadas)
     const clear = (x, y) => {
       let m = Infinity;
