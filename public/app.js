@@ -144,8 +144,9 @@
         <div class="step">
           <h4>${k + 1}. ${esc(s.ruleName)}</h4>
           <div class="eq">
-            ${k === 0 && s.rule !== 'M' ? '<span class="mono">M⁺•</span><span class="op">→</span>' : k > 0 ? `<span class="mono">m/z ${x.pathway[k - 1].ionMz}</span><span class="op">→</span>` : ''}
-            ${s.ionSvg ? `<figure class="mol">${s.ionSvg}<figcaption>${sub(s.ionFormula)}${s.oddElectron ? '⁺•' : '⁺'} · m/z ${s.ionMz}</figcaption></figure>` : `<span class="mono"><b>${sub(s.ionFormula)}${s.oddElectron ? '⁺•' : '⁺'}</b> (m/z ${s.ionMz})</span>`}
+            ${s.mechSvg ? `<figure class="mol mech">${s.mechSvg}<figcaption>${esc(s.precursorLabel || '')}</figcaption></figure>${s.rule === 'M' ? '' : '<span class="op">→</span>'}`
+              : k === 0 && s.rule !== 'M' ? '<span class="mono">M⁺•</span><span class="op">→</span>' : k > 0 ? `<span class="mono">m/z ${x.pathway[k - 1].ionMz}</span><span class="op">→</span>` : ''}
+            ${s.rule === 'M' && s.mechSvg ? '' : s.ionSvg ? `<figure class="mol">${s.ionSvg}<figcaption>${sub(s.ionFormula)}${s.oddElectron ? '⁺•' : '⁺'} · m/z ${s.ionMz}</figcaption></figure>` : `<span class="mono"><b>${sub(s.ionFormula)}${s.oddElectron ? '⁺•' : '⁺'}</b> (m/z ${s.ionMz})</span>`}
             ${s.neutralFormula ? `<span class="op">+</span>${s.neutralSvg ? `<figure class="mol small">${s.neutralSvg}<figcaption>${sub(s.neutralFormula)}</figcaption></figure>` : `<span class="mono">${sub(s.neutralFormula)}</span>`}<span class="muted small">(${esc(s.neutralLabel || 'neutro')})</span>` : ''}
           </div>
           <ol>${s.mechanism.map(t => `<li>${esc(t)}</li>`).join('')}</ol>
