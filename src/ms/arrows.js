@@ -96,7 +96,7 @@ const fmt = (v) => (+v).toFixed(1);
 /** Punta de flecha (completa o de media cabeza) en el extremo `p`, con dirección de llegada (dx, dy). */
 function arrowHead(p, dx, dy, type, color) {
   const L = Math.hypot(dx, dy) || 1; const ux = dx / L, uy = dy / L;
-  const len = 9, wid = 4.6;
+  const len = 11.5, wid = 5.6;
   const bx = p.x - ux * len, by = p.y - uy * len;
   const nx = -uy, ny = ux;
   if (type === 'full') {
@@ -221,7 +221,7 @@ function overlay(svg, P, ctx, mech) {
     const cx = mx + nx * h, cy = my + ny * h;
     used.push({ x: 0.25 * s.x + 0.5 * cx + 0.25 * e.x, y: 0.25 * s.y + 0.5 * cy + 0.25 * e.y });
     const col = a.t === 'full' ? COL.full : COL.fish;
-    parts.push(`<path d='M ${fmt(s.x)},${fmt(s.y)} Q ${fmt(cx)},${fmt(cy)} ${fmt(e.x)},${fmt(e.y)}' fill='none' stroke='${col}' stroke-width='1.7' stroke-linecap='round'/>`);
+    parts.push(`<path d='M ${fmt(s.x)},${fmt(s.y)} Q ${fmt(cx)},${fmt(cy)} ${fmt(e.x)},${fmt(e.y)}' fill='none' stroke='${col}' stroke-width='2.4' stroke-linecap='round'/>`);
     parts.push(arrowHead(e, e.x - cx, e.y - cy, a.t, col));
   }
   // rótulos de átomo (índices del dibujo de la molécula original)
@@ -241,7 +241,7 @@ function overlay(svg, P, ctx, mech) {
  * @param sp     Species precursora (átomos del grafo sp.g)
  * @param mech   { site, arrows, radicals, highlightBonds: [[i,j]] }
  */
-function mechanismSvg(RDKit, sp, mech, { w = 340, h = 250 } = {}) {
+function mechanismSvg(RDKit, sp, mech, { w = 380, h = 280 } = {}) {
   if (!sp || sp.formulaOverride || !sp.atoms || !sp.atoms.size || !mech) return null;
   const js = sp.toRDKitJSON({ neutralSkeleton: true });
   if (!js) return null;
