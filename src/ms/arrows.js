@@ -221,7 +221,7 @@ function overlay(svg, P, ctx, mech) {
     const cx = mx + nx * h, cy = my + ny * h;
     used.push({ x: 0.25 * s.x + 0.5 * cx + 0.25 * e.x, y: 0.25 * s.y + 0.5 * cy + 0.25 * e.y });
     const col = a.t === 'full' ? COL.full : COL.fish;
-    parts.push(`<path d='M ${fmt(s.x)},${fmt(s.y)} Q ${fmt(cx)},${fmt(cy)} ${fmt(e.x)},${fmt(e.y)}' fill='none' stroke='${col}' stroke-width='2.4' stroke-linecap='round'/>`);
+    parts.push(`<path d='M ${fmt(s.x)},${fmt(s.y)} Q ${fmt(cx)},${fmt(cy)} ${fmt(e.x)},${fmt(e.y)}' fill='none' stroke='${col}' stroke-width='1.4' stroke-linecap='round'/>`);
     parts.push(arrowHead(e, e.x - cx, e.y - cy, a.t, col));
   }
   // rótulos de átomo (índices del dibujo de la molécula original)
