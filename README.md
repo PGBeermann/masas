@@ -112,6 +112,7 @@ SMILES ─► RDKit (validación, sanitización, aromaticidad, SSSR) ─► MolG
 | `src/ms/rules_ext.js` | Reglas ampliadas v1.1 (12–15): anillos/ion distónico, retro-reacción de imidas, efecto orto, pérdida de ROH |
 | `src/ms/rules_beauchamp.js` | Reglas v1.2 (B1–B7) tomadas de Beauchamp, *Basics of Mass Spectroscopy* (MS_chapter.pdf): migración de enlaces múltiples, alquinos, alcanos −RH, eliminaciones, fragmentación alquénica consecutiva |
 | `src/ms/secondary.js` | Fragmentaciones consecutivas |
+| `src/ms/arrows.js` | Dibujo de mecanismos (v1.3): flechas curvas de 1 e⁻ (media cabeza) y 2 e⁻ (completa), carga ⊕ y electrón desapareado • sobre el SVG de RDKit; estado de transición cíclico plegado (McLafferty, eliminaciones, halonio) |
 | `src/ms/engine.js` | Orquestación, estabilidad de M⁺•, espectro y explicaciones |
 
 ### Reglas implementadas
@@ -161,6 +162,18 @@ Se revisaron todos los patrones del capítulo frente a la v1.1; sólo se añadie
 | B11 | Haluros de ácido: ion halocarbonilo X–C≡O⁺ menos estable que R–C≡O⁺ | Carbonilos §2 | Cloruro de butanoilo m/z 71 > 63 |
 
 En las reglas B1 y B6 las etiquetas de átomo (C3, O5…) siempre remiten a los índices del dibujo de la molécula original, aunque el mecanismo ocurra sobre un isómero o un ion intermedio.
+
+### Representación de los mecanismos (v1.3)
+
+Cada paso de la ruta se muestra como un esquema **precursor → ion + neutro**. Sobre el precursor se dibujan:
+
+* **Sitio de ionización**: carga ⊕ y electrón desapareado • sobre el par libre del heteroátomo (ionización n), sobre el enlace π (ionización π) o sobre el enlace σ (ionización σ). En la tarjeta del ion molecular se marca el sitio de menor energía de ionización (n: N > S > I > O > Br > Cl; luego π; luego σ C–C).
+* **Flechas curvas** (IUPAC, *curved-arrow notation*): media cabeza (naranja) = desplazamiento de un electrón; completa (azul) = desplazamiento de un par. Origen en el par libre, en el centro del enlace que se rompe o en el H que se transfiere; destino en el átomo o en el punto donde se forma el nuevo enlace.
+* **H transferidos** dibujados explícitamente; en los reordenamientos con estado de transición cíclico (McLafferty, McLafferty + 1, eliminaciones de H₂O/HX/ROH/RSH/R–H, ceteno, ion halonio de 5 miembros) la cadena se pliega en el anillo, como en los libros de texto.
+* **Enlace que se rompe** sombreado en naranja; índices de átomo de la molécula original en gris.
+* Los iones OE⁺• dibujados con su esqueleto neutro se encierran entre corchetes con ⊕•.
+
+Mecanismos con flechas: α-escisión (N, O, S, X; carbonilos; pérdida de H•), escisión inductiva, ion halonio/sulfonio cíclico, escisión alílica, bencílica y propargílica, escisión σ, McLafferty (C=O, C=N, C≡N, C=C, C≡C, arilo) con ambas retenciones de carga y McLafferty + 1, retro-Diels–Alder, eliminaciones de H₂O/H₂S/HX/ROH/RSH/NH₃/R–H, ceteno, •CH₃ de anisoles, α-escisión anular (rutas A, B y C), −CO del ion acilio, reacción del onio y migración del doble enlace (sobre el isómero). Los iones conocidos sólo por su fórmula (−CO de fenoles, −C₂H₂ de aromáticos, apertura de cicloalcanos, −H₂ de cationes) se describen sólo con texto.
 
 Cada ion se clasifica como **OE⁺•** o **EE⁺** (RDB entero/semientero), se verifica la **regla del nitrógeno** y se informan m/z nominal y exacto (restando la masa del electrón).
 
@@ -271,6 +284,7 @@ Licencias de terceros: RDKit (BSD-3), JSME (BSD-3), Express (MIT), Helmet (MIT).
 
 ## 7. Historial de versiones
 
+- **v1.3.0** — Esquemas de mecanismo con flechas curvas (1 e⁻ / 2 e⁻), carga ⊕ y electrón desapareado • en el precursor; sitio de ionización del M⁺•; estados de transición cíclicos plegados; H transferidos explícitos; corchetes ⊕• en iones OE⁺•; leyenda de convenciones en la interfaz. El espectro calculado no cambia.
 - **v1.2.0** — Patrones de Beauchamp (MS_chapter.pdf) ausentes en v1.1: migración del doble/triple enlace antes de fragmentarse; escisión propargílica, [M−1]⁺ y McLafferty en alquinos; eliminación de R–H en alcanos ramificados; eliminación de ROH, RSH, NH₃/RNH₂; fragmentación alquénica consecutiva de iones de eliminación; −(H₂O + C₂H₄) en 1-alcanoles; onio cíclicos de 5 y 3 miembros con Cl, Br, I y S; doble McLafferty en cetonas; −H₂ en cationes alilo; ion halocarbonilo. reparto de carga por la regla de Stevenson en el McLafferty de alquenos (1-hepteno 56 > 42). Conjunto de validación ampliado con 10 compuestos del capítulo.
 - **v1.1.0** — α-Escisión en anillos con ion distónico (cetonas, alcoholes, aminas, éteres y sulfuros cíclicos); McLafferty + 1 y pérdida de ROH en ésteres; McLafferty desde la cadena alcoxílica con retención de carga en el alqueno; efecto orto (−ROH/−H₂O, −•OH) también en iones secundarios; reacción del onio desde el carbono en oxonios de alcoholes; escisión bencílica con transferencia de H desde N–H/O–H; regla de Stevenson en α-escisiones que expulsan radicales bencílicos; retro-reacción de imidas/ureas cíclicas (cafeína); validación ampliada a 41 compuestos con similitud coseno.
 - **v1.0.0** — Versión inicial: 11 reglas primarias, 4 secundarias, 20 compuestos de validación; despliegue PM2/Nginx y Dokploy.
