@@ -96,7 +96,7 @@ const fmt = (v) => (+v).toFixed(1);
 /** Punta de flecha (completa o de media cabeza) en el extremo `p`, con dirección de llegada (dx, dy). */
 function arrowHead(p, dx, dy, type, color) {
   const L = Math.hypot(dx, dy) || 1; const ux = dx / L, uy = dy / L;
-  const len = 11.5, wid = 5.6;
+  const len = 9.0, wid = 4.6;
   const bx = p.x - ux * len, by = p.y - uy * len;
   const nx = -uy, ny = ux;
   if (type === 'full') {
